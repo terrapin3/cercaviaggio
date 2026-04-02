@@ -1168,6 +1168,11 @@ if (!function_exists('cvAccessoNavItems')) {
                         'label' => 'Mail',
                         'href' => cvAccessoUrl('mail-settings.php'),
                     ],
+                    [
+                        'slug' => 'settings-cronjob',
+                        'label' => 'Cronjob',
+                        'href' => cvAccessoUrl('cronjob.php'),
+                    ],
                 ],
             ];
         }
