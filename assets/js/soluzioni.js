@@ -113,6 +113,15 @@
       .replace(/'/g, '&#039;');
   }
 
+  function compactLabel(value, maxLen) {
+    var text = String(value || '').replace(/\s+/g, ' ').trim();
+    var limit = Math.max(12, parseInt(maxLen, 10) || 56);
+    if (text.length <= limit) {
+      return text;
+    }
+    return text.slice(0, Math.max(0, limit - 1)).trim() + '…';
+  }
+
   function normalizeDatePriceMap(rawMap) {
     var normalized = {
       outbound: {},
@@ -1604,11 +1613,15 @@
           escapeHtml(outboundPlaceholder) +
           '<br><small class="cv-selected-date-line">Data: ' + escapeHtml(outboundDateLabel) + '</small>';
       } else {
+        var outStops = summaryStops(out);
+        var outFromName = String(outStops.fromName || '');
+        var outToName = String(outStops.toName || '');
+        var outRouteLabel = compactLabel(outFromName, 34) + ' → ' + compactLabel(outToName, 34);
         selectedOutboundBody.innerHTML =
           '<strong>' + escapeHtml(out.departure_hm || '--:--') + ' → ' + escapeHtml(out.arrival_hm || '--:--') + '</strong>' +
           '<br><small class="cv-selected-date-line">Data: ' + escapeHtml(outboundDateLabel) + '</small>' +
-          '<br><small>' + escapeHtml(summaryStops(out).fromName) + ' → ' + escapeHtml(summaryStops(out).toName) + '</small>' +
-          '<br><small>€ ' + euro(out._validatedAmount || out.amount || 0) + '</small>';
+          '<br><small class="cv-selected-route-line" title="' + escapeHtml(outFromName + ' → ' + outToName) + '">' + escapeHtml(outRouteLabel) + '</small>' +
+          '<br><small class="cv-selected-price-line">€ ' + euro(out._validatedAmount || out.amount || 0) + '</small>';
       }
     }
 
@@ -1618,11 +1631,15 @@
           'Seleziona la soluzione di ritorno.' +
           '<br><small class="cv-selected-date-line">Data: ' + escapeHtml(returnDateLabel) + '</small>';
       } else {
+        var retStops = summaryStops(ret);
+        var retFromName = String(retStops.fromName || '');
+        var retToName = String(retStops.toName || '');
+        var retRouteLabel = compactLabel(retFromName, 34) + ' → ' + compactLabel(retToName, 34);
         selectedReturnBody.innerHTML =
           '<strong>' + escapeHtml(ret.departure_hm || '--:--') + ' → ' + escapeHtml(ret.arrival_hm || '--:--') + '</strong>' +
           '<br><small class="cv-selected-date-line">Data: ' + escapeHtml(returnDateLabel) + '</small>' +
-          '<br><small>' + escapeHtml(summaryStops(ret).fromName) + ' → ' + escapeHtml(summaryStops(ret).toName) + '</small>' +
-          '<br><small>€ ' + euro(ret._validatedAmount || ret.amount || 0) + '</small>';
+          '<br><small class="cv-selected-route-line" title="' + escapeHtml(retFromName + ' → ' + retToName) + '">' + escapeHtml(retRouteLabel) + '</small>' +
+          '<br><small class="cv-selected-price-line">€ ' + euro(ret._validatedAmount || ret.amount || 0) + '</small>';
       }
     }
 

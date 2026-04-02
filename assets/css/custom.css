@@ -3472,6 +3472,15 @@ a:not(.btn):not(.cv-logo):not(.nav-link):focus {
   margin-bottom: 0.42rem;
 }
 
+.cv-selected-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #1f446c;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.02rem;
+  line-height: 1.2;
+}
+
 .cv-selected-step {
   width: 24px;
   height: 24px;
@@ -3503,6 +3512,30 @@ a:not(.btn):not(.cv-logo):not(.nav-link):focus {
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.35;
+  min-width: 0;
+}
+
+.cv-selected-body strong {
+  display: block;
+  color: #1c4570;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.04rem;
+  line-height: 1.2;
+}
+
+.cv-selected-body small {
+  display: block;
+  line-height: 1.28;
+}
+
+.cv-selected-route-line {
+  color: #46688b;
+  font-weight: 700;
+}
+
+.cv-selected-price-line {
+  color: #174a7a;
+  font-weight: 800;
 }
 
 .cv-selected-date-line {
@@ -3906,6 +3939,98 @@ a:not(.btn):not(.cv-logo):not(.nav-link):focus {
 
   .cv-sol-line {
     text-align: left;
+  }
+
+  .cv-selected-strip {
+    border-radius: 14px;
+    padding: 0.52rem;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cv-selected-card,
+  .cv-selected-total {
+    padding: 0.52rem 0.58rem;
+    border-radius: 10px;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .cv-selected-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .cv-selected-head strong {
+    font-size: 0.95rem;
+  }
+
+  .cv-selected-head .btn {
+    margin-left: auto;
+  }
+
+  .cv-selected-body {
+    font-size: 0.84rem;
+    line-height: 1.22;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .cv-selected-body strong {
+    font-size: 0.96rem;
+    line-height: 1.18;
+  }
+
+  .cv-selected-route-line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .cv-selected-total {
+    order: 3;
+    position: sticky;
+    bottom: 0.45rem;
+    z-index: 20;
+    background: #fff;
+    box-shadow: 0 10px 20px rgba(20, 71, 113, 0.14);
+  }
+
+  #cvTripSummaryCollapse,
+  #cvTripSummaryCollapse.show {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  #cvTripSummaryCollapse .cv-selected-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  #cvTripSummaryCollapse .cv-selected-head,
+  #cvTripSummaryCollapse .cv-selected-body,
+  #cvTripSummaryCollapse .cv-selected-body * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  #cvTripSummaryCollapse .cv-selected-body br {
+    display: none;
+  }
+
+  #cvTripSummaryCollapse .cv-selected-body small {
+    margin-top: 0.18rem;
   }
 
   .cv-leg-body {
