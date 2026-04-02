@@ -1,0 +1,14 @@
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+RewriteRule ^tratte-autobus/?$ tratte-autobus.php [L,QSA,NC]
+RewriteRule ^tratte-autobus/([a-z0-9-]+)/?$ tratta.php?slug=$1 [L,QSA,NC]
+RewriteRule ^blog/?$ blog.php [L,QSA,NC]
+RewriteRule ^blog/([a-z0-9-]+)/?$ articolo.php?slug=$1 [L,QSA,NC]
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+</IfModule>
