@@ -168,6 +168,7 @@ function cvSolCacheDatePrices(
     int $adults,
     int $children,
     int $maxTransfers,
+    string $codiceCamb = '',
     int $rangeDays = 3,
     int $cacheTtlSeconds = 600
 ): array {
@@ -223,6 +224,7 @@ function cvSolCacheDatePrices(
                     (string) $adultCount,
                     (string) $childCount,
                     (string) $maxTransfers,
+                    trim($codiceCamb),
                 ])
             );
 
@@ -308,7 +310,7 @@ $datePriceMap = [
 $datePriceCalendarEnabled = false;
 $providerLogoMap = cvSolCollectProviderLogoMap(__DIR__ . '/assets/images/providers', 'images/providers');
 
-if ($part !== '' && $arr !== '' && $dt1 !== '' && !$deferredSearch) {
+if ($part !== '' && $arr !== '' && $dt1 !== '') {
     try {
         $connection = cvDbConnection();
         $runtimeSettings = cvRuntimeSettings($connection);
@@ -320,10 +322,12 @@ if ($part !== '' && $arr !== '' && $dt1 !== '' && !$deferredSearch) {
         $datePriceRangeDays = max(2, min(10, (int) ($runtimeSettings['pathfind_price_calendar_range_days'] ?? 3)));
         $datePriceCalendarEnabled = ((int) ($runtimeSettings['pathfind_date_price_calendar_enabled'] ?? 1)) === 1;
 
-        $outbound = cvPfSearchSolutions($connection, $part, $arr, $dt1, $ad, $bam, $maxTransfers, $camb);
+        if (!$deferredSearch) {
+            $outbound = cvPfSearchSolutions($connection, $part, $arr, $dt1, $ad, $bam, $maxTransfers, $camb);
 
-        if ($mode === 'roundtrip' && $dt2 !== '') {
-            $return = cvPfSearchSolutions($connection, $arr, $part, $dt2, $ad, $bam, $maxTransfers, $camb);
+            if ($mode === 'roundtrip' && $dt2 !== '') {
+                $return = cvPfSearchSolutions($connection, $arr, $part, $dt2, $ad, $bam, $maxTransfers, $camb);
+            }
         }
 
         // Tracking popolarita: incremento gestito su "Seleziona soluzione" (validazione live OK),
@@ -338,6 +342,7 @@ if ($part !== '' && $arr !== '' && $dt1 !== '' && !$deferredSearch) {
                 $ad,
                 $bam,
                 $maxTransfers,
+                $camb,
                 $datePriceRangeDays,
                 $cacheTtlSeconds
             );
@@ -350,6 +355,7 @@ if ($part !== '' && $arr !== '' && $dt1 !== '' && !$deferredSearch) {
                     $ad,
                     $bam,
                     $maxTransfers,
+                    $camb,
                     $datePriceRangeDays,
                     $cacheTtlSeconds
                 );

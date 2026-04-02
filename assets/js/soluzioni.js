@@ -12,6 +12,7 @@
     : {};
 
   var query = payload.query || {};
+  var datePriceMapScope = '';
   var deferredSearch = !!payload.deferred;
   var deferredEndpoint = String(config.deferredUrl || './soluzioni.php');
   var mode = query.mode === 'roundtrip' ? 'roundtrip' : 'oneway';
@@ -77,7 +78,8 @@
   var passengersModalEl = document.getElementById('passengersModal');
   var adInput = document.getElementById('adCount');
   var bamInput = document.getElementById('bamCount');
-  var datePriceMap = (window.CV_DATE_PRICE_MAP && typeof window.CV_DATE_PRICE_MAP === 'object') ? window.CV_DATE_PRICE_MAP : {};
+  var datePriceMap = normalizeDatePriceMap(window.CV_DATE_PRICE_MAP);
+  datePriceMapScope = buildDatePriceMapScope(query);
 
   var dateWindowOffset = 0;
   var dateWindowSize = 9;
@@ -109,6 +111,66 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function normalizeDatePriceMap(rawMap) {
+    var normalized = {
+      outbound: {},
+      return: {}
+    };
+    if (!rawMap || typeof rawMap !== 'object') {
+      return normalized;
+    }
+
+    var stages = ['outbound', 'return'];
+    for (var s = 0; s < stages.length; s += 1) {
+      var stageKey = stages[s];
+      var stageMap = rawMap[stageKey];
+      if (!stageMap || typeof stageMap !== 'object') {
+        continue;
+      }
+      var keys = Object.keys(stageMap);
+      for (var k = 0; k < keys.length; k += 1) {
+        var dateKey = String(keys[k] || '').trim();
+        if (dateKey === '') {
+          continue;
+        }
+        var price = Number(stageMap[dateKey]);
+        if (Number.isFinite(price) && price > 0) {
+          normalized[stageKey][dateKey] = price;
+        }
+      }
+    }
+
+    return normalized;
+  }
+
+  function mergeDatePriceMaps(baseMap, incomingMap) {
+    var merged = normalizeDatePriceMap(baseMap);
+    var incoming = normalizeDatePriceMap(incomingMap);
+    var stages = ['outbound', 'return'];
+    for (var s = 0; s < stages.length; s += 1) {
+      var stageKey = stages[s];
+      var keys = Object.keys(incoming[stageKey] || {});
+      for (var k = 0; k < keys.length; k += 1) {
+        var dateKey = keys[k];
+        merged[stageKey][dateKey] = incoming[stageKey][dateKey];
+      }
+    }
+    return merged;
+  }
+
+  function buildDatePriceMapScope(queryObj) {
+    var source = queryObj && typeof queryObj === 'object' ? queryObj : {};
+    var scopeParts = [
+      String(source.from_ref || ''),
+      String(source.to_ref || ''),
+      String(source.mode || ''),
+      String(source.ad || ''),
+      String(source.bam || ''),
+      String(source.camb || '')
+    ];
+    return scopeParts.join('|');
   }
 
   function euro(value) {
@@ -1052,11 +1114,18 @@
 
       stopDeferredProgress();
       payload = result.searchData;
-      query = payload.query || query;
+      var nextQuery = payload.query && typeof payload.query === 'object' ? payload.query : query;
+      var nextDatePriceScope = buildDatePriceMapScope(nextQuery);
+      query = nextQuery;
       deferredSearch = false;
       outboundData = payload.outbound && Array.isArray(payload.outbound.solutions) ? payload.outbound.solutions : [];
       returnData = payload.return && Array.isArray(payload.return.solutions) ? payload.return.solutions : [];
-      datePriceMap = result.datePriceMap && typeof result.datePriceMap === 'object' ? result.datePriceMap : {};
+      if (nextDatePriceScope === datePriceMapScope) {
+        datePriceMap = mergeDatePriceMaps(datePriceMap, result.datePriceMap);
+      } else {
+        datePriceMap = normalizeDatePriceMap(result.datePriceMap);
+      }
+      datePriceMapScope = nextDatePriceScope;
 
       if (!payload.outbound || payload.outbound.ok !== true) {
         showAlert(payload.outbound && payload.outbound.error ? payload.outbound.error : 'Errore nella ricerca andata.', 'danger');
