@@ -3562,6 +3562,56 @@ function cvAuthTicketChatIntent(string $message, bool $hasTicketContext = false)
     return $hasTicketContext ? 'ticket_status' : 'generic';
 }
 
+function cvAuthTicketChatRouteFollowupType(string $message): string
+{
+    $normalized = cvAssistantNormalizeText($message);
+    if ($normalized === '') {
+        return '';
+    }
+
+    // Prioritize explicit discount/promo questions.
+    foreach (['sconto', 'sconti', 'promo', 'promoz', 'offerta', 'coupon', 'codice sconto'] as $needle) {
+        if (strpos($normalized, cvAssistantNormalizeText($needle)) !== false) {
+            return 'discounts';
+        }
+    }
+
+    // Cheapest.
+    foreach (['piu econom', 'meno caro', 'prezzo piu basso', 'costa meno', 'piu basso'] as $needle) {
+        if (strpos($normalized, $needle) !== false) {
+            return 'cheapest';
+        }
+    }
+
+    // Earliest arrival.
+    if (
+        strpos($normalized, 'arriva prima') !== false
+        || strpos($normalized, 'arrivare prima') !== false
+        || strpos($normalized, 'arrivo prima') !== false
+        || strpos($normalized, 'che arriva prima') !== false
+        || strpos($normalized, 'arriva presto') !== false
+    ) {
+        return 'earliest';
+    }
+
+    // Fastest duration.
+    foreach (['piu velo', 'piu rapid', 'durata min', 'il piu velo', 'il piu rapid'] as $needle) {
+        if (strpos($normalized, $needle) !== false) {
+            return 'fastest';
+        }
+    }
+
+    // Short prompts like "veloce" / "economico".
+    if (preg_match('/\\bveloc[ei]\\b/u', $normalized) === 1) {
+        return 'fastest';
+    }
+    if (preg_match('/\\beconomic[oa]\\b/u', $normalized) === 1) {
+        return 'cheapest';
+    }
+
+    return '';
+}
+
 function cvAuthTicketChatDebugLog(string $stage, array $payload = []): void
 {
     $line = '[cv-chat-operator][' . $stage . '] ';
@@ -3745,14 +3795,85 @@ function cvAuthTicketChatParseTravelDate(string $message): string
     $today = new DateTimeImmutable('today', $timezone);
     $normalized = cvAssistantNormalizeText($trimmed);
 
-    if (strpos($normalized, 'dopodomani') !== false) {
+    if (preg_match('/\bdopodomani\b/u', $normalized) === 1) {
         return $today->modify('+2 day')->format('d/m/Y');
     }
-    if (strpos($normalized, 'domani') !== false) {
+    if (preg_match('/\bdomani\b/u', $normalized) === 1) {
         return $today->modify('+1 day')->format('d/m/Y');
     }
-    if (strpos($normalized, 'oggi') !== false) {
+    if (preg_match('/\boggi\b/u', $normalized) === 1) {
         return $today->format('d/m/Y');
+    }
+
+    $monthMap = [
+        'gennaio' => 1,
+        'gen' => 1,
+        'febbraio' => 2,
+        'feb' => 2,
+        'marzo' => 3,
+        'mar' => 3,
+        'aprile' => 4,
+        'apr' => 4,
+        'maggio' => 5,
+        'mag' => 5,
+        'giugno' => 6,
+        'giu' => 6,
+        'luglio' => 7,
+        'lug' => 7,
+        'agosto' => 8,
+        'ago' => 8,
+        'settembre' => 9,
+        'sett' => 9,
+        'set' => 9,
+        'ottobre' => 10,
+        'ott' => 10,
+        'novembre' => 11,
+        'nov' => 11,
+        'dicembre' => 12,
+        'dic' => 12,
+    ];
+    $monthKeys = array_keys($monthMap);
+    usort($monthKeys, static function (string $left, string $right): int {
+        return strlen($right) <=> strlen($left);
+    });
+    $monthPattern = implode('|', array_map('preg_quote', $monthKeys));
+
+    if (preg_match('/\b(\d{1,2})\s+(?:di\s+)?(' . $monthPattern . ')\b(?:\s+(\d{2,4}))?/u', $normalized, $matches) === 1) {
+        $day = (int) ($matches[1] ?? 0);
+        $month = (int) ($monthMap[$matches[2]] ?? 0);
+        $yearRaw = isset($matches[3]) ? trim((string) $matches[3]) : '';
+        $year = (int) $today->format('Y');
+        if ($yearRaw !== '') {
+            $year = strlen($yearRaw) === 2 ? (2000 + (int) $yearRaw) : (int) $yearRaw;
+        }
+        if (checkdate($month, $day, $year)) {
+            $candidate = DateTimeImmutable::createFromFormat('!d/m/Y', sprintf('%02d/%02d/%04d', $day, $month, $year), $timezone);
+            if ($candidate instanceof DateTimeImmutable) {
+                if ($yearRaw === '' && $candidate < $today) {
+                    $candidate = $candidate->modify('+1 year');
+                }
+                return $candidate->format('d/m/Y');
+            }
+        }
+    }
+
+    if (preg_match('/\b(' . $monthPattern . ')\s+(\d{1,2})\b(?:\s+(\d{2,4}))?/u', $normalized, $matches) === 1) {
+        $day = (int) ($matches[2] ?? 0);
+        $month = (int) ($monthMap[$matches[1]] ?? 0);
+        $yearRaw = isset($matches[3]) ? trim((string) $matches[3]) : '';
+        $year = (int) $today->format('Y');
+        if ($yearRaw !== '') {
+            $year = strlen($yearRaw) === 2 ? (2000 + (int) $yearRaw) : (int) $yearRaw;
+        }
+        if (checkdate($month, $day, $year)) {
+            $candidate = DateTimeImmutable::createFromFormat('!d/m/Y', sprintf('%02d/%02d/%04d', $day, $month, $year), $timezone);
+            if ($candidate instanceof DateTimeImmutable) {
+                if ($yearRaw === '' && $candidate < $today) {
+                    $candidate = $candidate->modify('+1 year');
+                }
+                return $candidate->format('d/m/Y');
+            }
+        }
     }
 
     if (preg_match('/\b(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?\b/', $trimmed, $matches) === 1) {
@@ -4244,7 +4365,7 @@ function cvAuthTicketChatResolveEntryByName(mysqli $connection, string $label): 
  * @param array<string,float> $geoPoint
  * @return array<string,mixed>
  */
-function cvAuthTicketChatReplyForGeoDepartures(mysqli $connection, array $routeDraft, array $geoPoint): array
+function cvAuthTicketChatReplyForGeoDepartures(mysqli $connection, array $routeDraft, array $geoPoint, string $dateIt = ''): array
 {
     $toRef = trim((string) ($routeDraft['to_ref'] ?? ''));
     $toName = trim((string) ($routeDraft['to_name'] ?? ''));
@@ -4272,7 +4393,23 @@ function cvAuthTicketChatReplyForGeoDepartures(mysqli $connection, array $routeD
 
     $lat = isset($geoPoint['lat']) ? (float) $geoPoint['lat'] : 0.0;
     $lon = isset($geoPoint['lon']) ? (float) $geoPoint['lon'] : 0.0;
-    $dateIt = date('d/m/Y');
+    $dateIt = trim($dateIt);
+    if ($dateIt === '') {
+        $tomorrowIt = (new DateTimeImmutable('tomorrow', new DateTimeZone('Europe/Rome')))->format('d/m/Y');
+        return [
+            'reply' => 'Ok. Per arrivare a ' . $toName . ' partendo dalla tua posizione, per che giorno vuoi cercare? (Oggi, Domani oppure una data tipo ' . $tomorrowIt . ').',
+            'suggestions' => ['Oggi', 'Domani', $tomorrowIt],
+            'actions' => [],
+            'route_lookup' => [
+                'from_ref' => '',
+                'from_name' => '',
+                'to_ref' => $toRef,
+                'to_name' => $toName,
+                'geo_lat' => $lat,
+                'geo_lon' => $lon,
+            ],
+        ];
+    }
 
     $candidates = [];
     foreach (cvAuthTicketChatRouteEntries($connection) as $entry) {
@@ -4344,7 +4481,7 @@ function cvAuthTicketChatReplyForGeoDepartures(mysqli $connection, array $routeD
         ];
     }
 
-    $lines = ['Per arrivare a ' . $toName . ', le partenze piu prossime da dove sei sono:'];
+    $lines = ['Per arrivare a ' . $toName . ' il ' . $dateIt . ', le partenze piu prossime da dove sei sono:'];
     foreach ($matches as $index => $item) {
         $line = ($index + 1) . '. ' . (string) ($item['from_name'] ?? '');
         $distance = (float) ($item['distance_km'] ?? 0.0);
@@ -4381,7 +4518,282 @@ function cvAuthTicketChatReplyForGeoDepartures(mysqli $connection, array $routeD
             'from_name' => '',
             'to_ref' => $toRef,
             'to_name' => $toName,
+            'geo_lat' => $lat,
+            'geo_lon' => $lon,
         ],
+    ];
+}
+
+/**
+ * @param array<string,mixed> $solution
+ */
+function cvAuthTicketChatSolutionLine(array $solution, int $index = 1, bool $withDiscountHint = false): string
+{
+    $departureHm = trim((string) ($solution['departure_hm'] ?? ''));
+    $arrivalHm = trim((string) ($solution['arrival_hm'] ?? ''));
+    $transfers = max(0, (int) ($solution['transfers'] ?? 0));
+    $durationLabel = cvAuthTicketChatDurationLabel((int) ($solution['duration_minutes'] ?? 0));
+    $amount = (float) ($solution['amount'] ?? 0.0);
+    $providerName = '';
+    $legs = isset($solution['legs']) && is_array($solution['legs']) ? $solution['legs'] : [];
+    if (count($legs) > 0) {
+        $providerName = trim((string) ($legs[0]['provider_name'] ?? ''));
+    }
+
+    $line = $index . '. ' . $departureHm . ' -> ' . $arrivalHm . ' | ' . $durationLabel;
+    $line .= $transfers <= 0 ? ' | diretto' : (' | ' . $transfers . ' cambio');
+    if ($providerName !== '') {
+        $line .= ' | ' . $providerName;
+    }
+    if ($amount > 0.0) {
+        $line .= ' | da ' . cvFormatEuro($amount) . ' EUR';
+    }
+
+    if ($withDiscountHint && count($legs) > 0) {
+        $discountPercent = (float) ($legs[0]['discount_percent'] ?? 0.0);
+        $originalAmount = (float) ($legs[0]['original_amount'] ?? 0.0);
+        if ($discountPercent > 0.0) {
+            $line .= ' (sconto ' . rtrim(rtrim(number_format($discountPercent, 2, ',', '.'), '0'), ',') . '%)';
+        } elseif ($originalAmount > 0.0 && $amount > 0.0 && $originalAmount > $amount + 0.01) {
+            $line .= ' (in sconto)';
+        }
+    }
+
+    return $line;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $solutions
+ * @return array<string,mixed>|null
+ */
+function cvAuthTicketChatPickBestSolution(array $solutions, string $followupType): ?array
+{
+    $best = null;
+    $bestKey = null;
+
+    foreach ($solutions as $solution) {
+        if (!is_array($solution)) {
+            continue;
+        }
+
+        if ($followupType === 'cheapest') {
+            $amount = (float) ($solution['amount'] ?? 0.0);
+            if ($amount <= 0.0) {
+                continue;
+            }
+            $key = [$amount, (int) ($solution['duration_minutes'] ?? 0), (int) ($solution['transfers'] ?? 0), (string) ($solution['departure_iso'] ?? '')];
+        } elseif ($followupType === 'earliest') {
+            $arrTs = strtotime((string) ($solution['arrival_iso'] ?? '')) ?: 0;
+            if ($arrTs <= 0) {
+                continue;
+            }
+            $key = [$arrTs, (int) ($solution['duration_minutes'] ?? 0), (float) ($solution['amount'] ?? 0.0), (string) ($solution['departure_iso'] ?? '')];
+        } else {
+            // fastest
+            $duration = (int) ($solution['duration_minutes'] ?? 0);
+            if ($duration <= 0) {
+                continue;
+            }
+            $key = [$duration, (int) ($solution['transfers'] ?? 0), (float) ($solution['amount'] ?? 0.0), (string) ($solution['departure_iso'] ?? '')];
+        }
+
+        if ($bestKey === null || $key < $bestKey) {
+            $bestKey = $key;
+            $best = $solution;
+        }
+    }
+
+    return is_array($best) ? $best : null;
+}
+
+/**
+ * @param array<string,mixed> $routeRequest
+ * @return array<string,mixed>
+ */
+function cvAuthTicketChatReplyForRouteFollowup(mysqli $connection, array $settings, array $routeRequest, string $followupType): array
+{
+    $fromRef = trim((string) ($routeRequest['from_ref'] ?? ''));
+    $toRef = trim((string) ($routeRequest['to_ref'] ?? ''));
+    $fromName = trim((string) ($routeRequest['from_name'] ?? ''));
+    $toName = trim((string) ($routeRequest['to_name'] ?? ''));
+    $dateIt = trim((string) ($routeRequest['date_it'] ?? ''));
+
+    if ($fromRef === '' || $toRef === '' || $fromName === '' || $toName === '' || $dateIt === '') {
+        return [
+            'reply' => 'Ok. Per dirti il risultato migliore mi serve una tratta completa e una data (es: Da Salerno a Siena domani).',
+            'suggestions' => ['Oggi', 'Domani', 'Cerca un altra tratta'],
+            'actions' => [],
+            'route_date_pending' => true,
+        ];
+    }
+
+    $search = cvPfSearchSolutions($connection, $fromRef, $toRef, $dateIt, 1, 0, 2, '');
+    $solutions = isset($search['solutions']) && is_array($search['solutions']) ? $search['solutions'] : [];
+    if (($search['ok'] ?? false) !== true || count($solutions) === 0) {
+        return [
+            'reply' => 'Al momento non trovo soluzioni per ' . $fromName . ' -> ' . $toName . ' il ' . $dateIt . '.',
+            'suggestions' => ['Oggi', 'Domani', 'Cerca un altra tratta'],
+            'actions' => [
+                [
+                    'type' => 'link',
+                    'label' => 'Apri ricerca',
+                    'href' => cvAuthTicketChatBuildSolutionsUrl($fromRef, $toRef, $dateIt),
+                ],
+            ],
+            'route' => [
+                'from_ref' => $fromRef,
+                'from_name' => $fromName,
+                'to_ref' => $toRef,
+                'to_name' => $toName,
+                'date_it' => $dateIt,
+            ],
+            'route_date_pending' => false,
+        ];
+    }
+
+    if ($followupType === 'discounts') {
+        $discounted = [];
+        foreach ($solutions as $solution) {
+            if (!is_array($solution)) {
+                continue;
+            }
+            $legs = isset($solution['legs']) && is_array($solution['legs']) ? $solution['legs'] : [];
+            if (count($legs) === 0) {
+                continue;
+            }
+            $amount = (float) ($solution['amount'] ?? 0.0);
+            $original = (float) ($legs[0]['original_amount'] ?? 0.0);
+            $percent = (float) ($legs[0]['discount_percent'] ?? 0.0);
+            if ($percent > 0.0 || ($original > 0.0 && $amount > 0.0 && $original > $amount + 0.01)) {
+                $discounted[] = $solution;
+            }
+        }
+
+        if (count($discounted) === 0) {
+            $cheapest = cvAuthTicketChatPickBestSolution($solutions, 'cheapest');
+            $reply = 'Per ' . $fromName . ' -> ' . $toName . ' il ' . $dateIt . ' non vedo sconti applicati sulle soluzioni disponibili.';
+            if (is_array($cheapest)) {
+                $reply .= "\n\nPrezzo piu basso trovato:\n" . cvAuthTicketChatSolutionLine($cheapest, 1, false);
+            }
+            return [
+                'reply' => $reply,
+                'suggestions' => ['Apri tutte le soluzioni', 'Dimmi la piu economica', 'Dimmi quella che arriva prima'],
+                'actions' => [
+                    [
+                        'type' => 'link',
+                        'label' => 'Apri tutte le soluzioni',
+                        'href' => cvAuthTicketChatBuildSolutionsUrl($fromRef, $toRef, $dateIt),
+                    ],
+                ],
+                'route' => [
+                    'from_ref' => $fromRef,
+                    'from_name' => $fromName,
+                    'to_ref' => $toRef,
+                    'to_name' => $toName,
+                    'date_it' => $dateIt,
+                ],
+                'route_date_pending' => false,
+            ];
+        }
+
+        usort(
+            $discounted,
+            static function (array $a, array $b): int {
+                return ((float) ($a['amount'] ?? 0.0)) <=> ((float) ($b['amount'] ?? 0.0));
+            }
+        );
+
+        $lines = [
+            'Per ' . $fromName . ' -> ' . $toName . ' il ' . $dateIt . ' ho trovato ' . count($discounted) . ' soluzioni con sconto:',
+        ];
+        foreach (array_slice($discounted, 0, 3) as $idx => $solution) {
+            $lines[] = cvAuthTicketChatSolutionLine($solution, $idx + 1, true);
+        }
+        $lines[] = 'Se vuoi, posso anche dirti la piu veloce o quella che arriva prima.';
+
+        return [
+            'reply' => implode("\n", $lines),
+            'suggestions' => ['Apri tutte le soluzioni', 'Dimmi la piu veloce', 'Dimmi quella che arriva prima'],
+            'actions' => [
+                [
+                    'type' => 'link',
+                    'label' => 'Apri tutte le soluzioni',
+                    'href' => cvAuthTicketChatBuildSolutionsUrl($fromRef, $toRef, $dateIt),
+                ],
+            ],
+            'route' => [
+                'from_ref' => $fromRef,
+                'from_name' => $fromName,
+                'to_ref' => $toRef,
+                'to_name' => $toName,
+                'date_it' => $dateIt,
+            ],
+            'route_date_pending' => false,
+        ];
+    }
+
+    $best = cvAuthTicketChatPickBestSolution($solutions, $followupType);
+    if (!is_array($best)) {
+        return [
+            'reply' => 'Ok. Ho le soluzioni, ma non riesco a calcolare il risultato migliore in questo momento. Apri tutte le soluzioni e scegli quella che preferisci.',
+            'suggestions' => ['Apri tutte le soluzioni', 'Domani', 'Cerca un altra tratta'],
+            'actions' => [
+                [
+                    'type' => 'link',
+                    'label' => 'Apri tutte le soluzioni',
+                    'href' => cvAuthTicketChatBuildSolutionsUrl($fromRef, $toRef, $dateIt),
+                ],
+            ],
+            'route' => [
+                'from_ref' => $fromRef,
+                'from_name' => $fromName,
+                'to_ref' => $toRef,
+                'to_name' => $toName,
+                'date_it' => $dateIt,
+            ],
+            'route_date_pending' => false,
+        ];
+    }
+
+    $label = 'piu veloce';
+    if ($followupType === 'earliest') {
+        $label = 'che arriva prima';
+    } elseif ($followupType === 'cheapest') {
+        $label = 'piu economica';
+    }
+
+    $lines = [
+        'Per ' . $fromName . ' -> ' . $toName . ' il ' . $dateIt . ', la soluzione ' . $label . ' e:',
+        cvAuthTicketChatSolutionLine($best, 1, true),
+    ];
+
+    if ($followupType !== 'cheapest') {
+        $cheapest = cvAuthTicketChatPickBestSolution($solutions, 'cheapest');
+        if (is_array($cheapest)) {
+            $lines[] = '';
+            $lines[] = 'Prezzo piu basso (se diverso):';
+            $lines[] = cvAuthTicketChatSolutionLine($cheapest, 1, true);
+        }
+    }
+
+    return [
+        'reply' => implode("\n", $lines),
+        'suggestions' => ['Apri tutte le soluzioni', 'Dimmi la piu economica', 'Dimmi la piu veloce'],
+        'actions' => [
+            [
+                'type' => 'link',
+                'label' => 'Apri tutte le soluzioni',
+                'href' => cvAuthTicketChatBuildSolutionsUrl($fromRef, $toRef, $dateIt),
+            ],
+        ],
+        'route' => [
+            'from_ref' => $fromRef,
+            'from_name' => $fromName,
+            'to_ref' => $toRef,
+            'to_name' => $toName,
+            'date_it' => $dateIt,
+        ],
+        'route_date_pending' => false,
     ];
 }
 
@@ -4396,6 +4808,11 @@ function cvAuthTicketChatReplyForRouteRequest(mysqli $connection, array $setting
     $fromName = trim((string) ($routeRequest['from_name'] ?? ''));
     $toName = trim((string) ($routeRequest['to_name'] ?? ''));
     $dateIt = trim((string) ($routeRequest['date_it'] ?? ''));
+    $followupType = trim((string) ($routeRequest['followup_type'] ?? ''));
+
+    if ($followupType !== '') {
+        return cvAuthTicketChatReplyForRouteFollowup($connection, $settings, $routeRequest, $followupType);
+    }
 
     if ($fromRef === '' || $toRef === '' || $fromName === '' || $toName === '') {
         return [
@@ -5113,6 +5530,9 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
     $routeDraft = isset($conversationContext['route_lookup']) && is_array($conversationContext['route_lookup'])
         ? $conversationContext['route_lookup']
         : [];
+    $lastRoute = isset($conversationContext['last_route']) && is_array($conversationContext['last_route'])
+        ? $conversationContext['last_route']
+        : [];
     $storedTicketCode = strtoupper(trim((string) ($conversation['ticket_code'] ?? '')));
     $isExplicitOperatorTrigger = trim($messageText) === '[operator]';
     $intent = cvAuthTicketChatIntent($messageText, false);
@@ -5159,6 +5579,8 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
     $routeSingleStopHint = null;
     $routeTextHint = null;
     $geoPoint = cvAuthTicketChatExtractGeoPoint($messageText);
+    $parsedTravelDate = cvAuthTicketChatParseTravelDate($messageText);
+    $routeFollowupType = cvAuthTicketChatRouteFollowupType($messageText);
     $nearbyStopsRequest = null;
     if (!$ticketFound && $explicitTicketCode === '' && !$isIdentityFlowActive && !$isSupportTicketFlowActive && !$isPersonalTicketRequest) {
         if (
@@ -5202,13 +5624,13 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
                     'from_name' => (string) ($routeDraft['from_name'] ?? ''),
                     'to_ref' => (string) ($routeDraft['to_ref'] ?? ''),
                     'to_name' => (string) ($routeDraft['to_name'] ?? ''),
-                    'date_it' => cvAuthTicketChatParseTravelDate($messageText),
+                    'date_it' => $parsedTravelDate,
                     'raw_message' => $messageText,
                 ];
                 $intent = 'route';
             }
 
-            $routeDateIt = cvAuthTicketChatParseTravelDate($messageText);
+            $routeDateIt = $parsedTravelDate;
             if (
                 $routeDateIt !== ''
                 && trim((string) ($routeDraft['from_ref'] ?? '')) !== ''
@@ -5233,11 +5655,71 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
             }
         }
 
+        if (
+            !is_array($nearbyStopsRequest)
+            && !is_array($routeRequest)
+            && $parsedTravelDate !== ''
+            && !empty($lastRoute['from_ref'])
+            && !empty($lastRoute['to_ref'])
+        ) {
+            $routeRequest = [
+                'from_ref' => (string) ($lastRoute['from_ref'] ?? ''),
+                'from_name' => (string) ($lastRoute['from_name'] ?? ''),
+                'to_ref' => (string) ($lastRoute['to_ref'] ?? ''),
+                'to_name' => (string) ($lastRoute['to_name'] ?? ''),
+                'date_it' => $parsedTravelDate,
+                'raw_message' => $messageText,
+            ];
+            $intent = 'route';
+        }
+
+        // Follow-up questions like "dimmi il piu veloce / quello che arriva prima / il piu economico / ci sono sconti?"
+        // Reuse the last searched route (from/to/date) even if the user doesn't repeat it.
+        if (
+            !is_array($nearbyStopsRequest)
+            && !is_array($routeRequest)
+            && $routeFollowupType !== ''
+            && !empty($lastRoute['from_ref'])
+            && !empty($lastRoute['to_ref'])
+        ) {
+            $routeRequest = [
+                'from_ref' => (string) ($lastRoute['from_ref'] ?? ''),
+                'from_name' => (string) ($lastRoute['from_name'] ?? ''),
+                'to_ref' => (string) ($lastRoute['to_ref'] ?? ''),
+                'to_name' => (string) ($lastRoute['to_name'] ?? ''),
+                'date_it' => (string) ($lastRoute['date_it'] ?? ''),
+                'raw_message' => $messageText,
+                'followup_type' => $routeFollowupType,
+            ];
+            $intent = 'route';
+        }
+
+        // Follow-up for geo-based departures: user can answer with "domani" / "14 aprile" after sending [geo].
+        if (
+            !is_array($nearbyStopsRequest)
+            && !is_array($routeRequest)
+            && !is_array($geoPoint)
+            && $parsedTravelDate !== ''
+            && trim((string) ($routeDraft['to_ref'] ?? '')) !== ''
+            && (isset($routeDraft['geo_lat'], $routeDraft['geo_lon']))
+            && is_numeric($routeDraft['geo_lat'])
+            && is_numeric($routeDraft['geo_lon'])
+        ) {
+            $geoPoint = [
+                'lat' => (float) $routeDraft['geo_lat'],
+                'lon' => (float) $routeDraft['geo_lon'],
+            ];
+        }
+
         if (!is_array($nearbyStopsRequest) && !is_array($routeRequest)) {
             $routeSingleStopHint = cvAuthTicketChatExtractSingleStopMention($connection, $messageText);
         }
         if (!is_array($nearbyStopsRequest) && !is_array($routeRequest) && !is_array($routeSingleStopHint)) {
             $routeTextHint = cvAuthTicketChatExtractRouteTextHint($messageText);
+        }
+
+        if (is_array($routeRequest) && $routeFollowupType !== '' && empty($routeRequest['followup_type'])) {
+            $routeRequest['followup_type'] = $routeFollowupType;
         }
     }
     $knowledgeItems = !empty($settings['learning_enabled'])
@@ -5543,6 +6025,15 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
             $conversationPatch['context']['support_ticket_draft'] = [];
             $conversationPatch['context']['route_lookup'] = [];
         }
+        if (isset($replyData['route']) && is_array($replyData['route'])) {
+            $conversationPatch['context']['last_route'] = [
+                'from_ref' => (string) ($replyData['route']['from_ref'] ?? ''),
+                'from_name' => (string) ($replyData['route']['from_name'] ?? ''),
+                'to_ref' => (string) ($replyData['route']['to_ref'] ?? ''),
+                'to_name' => (string) ($replyData['route']['to_name'] ?? ''),
+                'date_it' => (string) ($replyData['route']['date_it'] ?? ''),
+            ];
+        }
     } elseif (is_array($routeSingleStopHint) && !$isPersonalTicketRequest) {
         $hintRole = trim((string) ($routeSingleStopHint['role'] ?? ''));
         $hintRef = trim((string) ($routeSingleStopHint['ref'] ?? ''));
@@ -5575,7 +6066,7 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
         $conversationPatch['context']['identity_lookup'] = [];
         $conversationPatch['context']['support_ticket_draft'] = [];
     } elseif (is_array($geoPoint) && !$isPersonalTicketRequest) {
-        $geoReply = cvAuthTicketChatReplyForGeoDepartures($connection, $routeDraft, $geoPoint);
+        $geoReply = cvAuthTicketChatReplyForGeoDepartures($connection, $routeDraft, $geoPoint, $parsedTravelDate);
         $replyData['reply'] = (string) ($geoReply['reply'] ?? 'Altrimenti indicami una localita di partenza.');
         $replyData['suggestions'] = isset($geoReply['suggestions']) && is_array($geoReply['suggestions'])
             ? $geoReply['suggestions']
@@ -5588,6 +6079,8 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
             'from_name' => (string) ($routeLookup['from_name'] ?? ''),
             'to_ref' => (string) ($routeLookup['to_ref'] ?? ''),
             'to_name' => (string) ($routeLookup['to_name'] ?? ''),
+            'geo_lat' => isset($routeLookup['geo_lat']) && is_numeric($routeLookup['geo_lat']) ? (float) $routeLookup['geo_lat'] : null,
+            'geo_lon' => isset($routeLookup['geo_lon']) && is_numeric($routeLookup['geo_lon']) ? (float) $routeLookup['geo_lon'] : null,
         ];
         $conversationPatch['ticket_code'] = '';
         $conversationPatch['provider_code'] = '';
@@ -5889,9 +6382,13 @@ function cvAuthHandleTicketChatSupport(mysqli $connection): void
     }
     if ($collectLogs) {
         cvAuthTicketChatDebugLog('message', [
+            'api_file' => __FILE__,
+            'api_build' => 'cv-chat-2026-04-07a',
             'session_key' => $sessionKey,
             'intent' => $intent,
             'message' => $messageText,
+            'parsed_date_it' => $parsedTravelDate,
+            'route_request' => $routeRequest,
             'unresolved_count' => $operatorUnresolvedCount,
             'threshold' => $operatorThreshold,
             'operator_available' => $operatorAvailableResponse,

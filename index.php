@@ -609,7 +609,7 @@ if (!is_string($stopsJson)) {
 
     <section class="cv-popular" id="viaggi-popolari">
       <div class="mb-3 mb-lg-4">
-        <h2 class="cv-section-title mb-0">Viaggi popolari</h2>
+        <h2 class="cv-section-title mb-0 mt-4">Viaggi popolari</h2>
       </div>
 
       <?php if (count($requestedPopularRoutes) > 0): ?>

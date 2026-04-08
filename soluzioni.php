@@ -51,6 +51,19 @@ function cvSolResolveStopLabel(?mysqli $connection, string $rawRef, string $fall
         return 'Fermata selezionata';
     }
 
+    // When the ref is a logical place (macroarea/city), keep the place label
+    // instead of replacing it with the first expanded provider stop.
+    if (
+        $connection instanceof mysqli
+        && function_exists('cvSearchRouteResolveRefName')
+        && ((string) ($parsedRef['provider_code'] ?? '')) === 'place'
+    ) {
+        $resolvedPlaceName = trim(cvSearchRouteResolveRefName($connection, $rawRef, $fallback));
+        if ($resolvedPlaceName !== '' && !cvSolLooksTechnicalRef($resolvedPlaceName)) {
+            return $resolvedPlaceName;
+        }
+    }
+
     if ($connection instanceof mysqli) {
         $candidates = cvPfFetchStopCandidates($connection, $parsedRef);
         if (count($candidates) > 0) {

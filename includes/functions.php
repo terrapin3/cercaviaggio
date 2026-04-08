@@ -790,8 +790,9 @@ if (!function_exists('cvFetchSearchEntries')) {
             $places = array_values(array_filter(
                 $places,
                 static function (array $place): bool {
-                    $type = (string) ($place['place_type'] ?? '');
-                    return !in_array($type, ['macroarea', 'province'], true);
+                    $type = strtolower(trim((string) ($place['place_type'] ?? '')));
+                    $normalized = preg_replace('/[^a-z0-9]+/', '', $type);
+                    return $normalized !== 'province';
                 }
             ));
 
@@ -1015,7 +1016,7 @@ if (!function_exists('cvSearchRouteResolvePlaceName')) {
         }
 
         $statement = $connection->prepare(
-            "SELECT name
+            "SELECT name, place_type
              FROM cv_places
              WHERE id_place = ?
              ORDER BY is_active DESC, id_place ASC
@@ -1028,8 +1029,15 @@ if (!function_exists('cvSearchRouteResolvePlaceName')) {
                 if ($result instanceof mysqli_result) {
                     $row = $result->fetch_assoc();
                     $name = is_array($row) ? trim((string) ($row['name'] ?? '')) : '';
+                    $placeType = is_array($row) ? trim((string) ($row['place_type'] ?? '')) : '';
                     $statement->close();
                     if ($name !== '') {
+                        if (function_exists('cvPlaceSuggestionDisplayName') && $placeType !== '') {
+                            $displayName = cvPlaceSuggestionDisplayName($name, $placeType);
+                            if (trim($displayName) !== '') {
+                                return $displayName;
+                            }
+                        }
                         return $name;
                     }
                 } else {
@@ -2146,8 +2154,10 @@ if (!function_exists('cvHomepageFeaturedRoutesFetchSelections')) {
 SELECT
   r.provider_code,
   COALESCE(p.name, r.provider_code) AS provider_name,
+  COALESCE(fs.external_id, fs_id.external_id, '') AS resolved_from_id,
   COALESCE(fs.external_id, fs_id.external_id, r.from_stop_external_id) AS from_id,
   COALESCE(fs.name, fs_id.name, r.from_stop_external_id) AS from_name,
+  COALESCE(ts.external_id, ts_id.external_id, '') AS resolved_to_id,
   COALESCE(ts.external_id, ts_id.external_id, r.to_stop_external_id) AS to_id,
   COALESCE(ts.name, ts_id.name, r.to_stop_external_id) AS to_name,
   r.sort_order,
@@ -2220,6 +2230,10 @@ SQL;
                     continue;
                 }
 
+                $resolvedFromId = trim((string) ($row['resolved_from_id'] ?? ''));
+                $resolvedToId = trim((string) ($row['resolved_to_id'] ?? ''));
+                $hasStops = ($resolvedFromId !== '' && $resolvedToId !== '');
+
                 $grouped[$providerCode][] = [
                     'route_key' => $routeKey,
                     'provider_code' => $providerCode,
@@ -2232,7 +2246,9 @@ SQL;
                     'min_amount' => isset($row['min_amount']) ? (float) $row['min_amount'] : 0.0,
                     'currency' => (string) ($row['currency'] ?? 'EUR'),
                     'fare_count' => isset($row['fare_count']) ? (int) $row['fare_count'] : 0,
-                    'is_valid' => isset($row['fare_count']) ? (int) $row['fare_count'] > 0 : false,
+                    // Show featured routes as long as stops still exist, even if the fare table is empty.
+                    // Price will be computed at search time.
+                    'is_valid' => $hasStops,
                 ];
             }
 

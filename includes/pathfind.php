@@ -3815,6 +3815,35 @@ if (!function_exists('cvPfSearchSolutions')) {
             (float) ($tuning['to_radius_km'] ?? 5.0),
             (int) ($tuning['nearby_max_extras'] ?? 12)
         );
+
+        // If the request explicitly targets a single provider (e.g. "leonetti|123"),
+        // keep the search confined to that provider. This prevents mixing providers
+        // for sponsored/home featured routes and for explicit provider stop searches.
+        $fromProviderLock = isset($fromRef['provider_code']) ? trim((string) $fromRef['provider_code']) : '';
+        $toProviderLock = isset($toRef['provider_code']) ? trim((string) $toRef['provider_code']) : '';
+        $lockedProviderCode = '';
+        if (
+            $fromProviderLock !== ''
+            && $toProviderLock !== ''
+            && $fromProviderLock === $toProviderLock
+            && $fromProviderLock !== 'place'
+        ) {
+            $lockedProviderCode = $fromProviderLock;
+        }
+        if ($lockedProviderCode !== '') {
+            $fromStops = array_values(array_filter(
+                $fromStops,
+                static function (array $stop) use ($lockedProviderCode): bool {
+                    return trim((string) ($stop['provider_code'] ?? '')) === $lockedProviderCode;
+                }
+            ));
+            $toStops = array_values(array_filter(
+                $toStops,
+                static function (array $stop) use ($lockedProviderCode): bool {
+                    return trim((string) ($stop['provider_code'] ?? '')) === $lockedProviderCode;
+                }
+            ));
+        }
         $fromDistanceMap = cvPfBuildStopDistanceMap($fromStops);
         $toDistanceMap = cvPfBuildStopDistanceMap($toStops);
 

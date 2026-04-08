@@ -150,6 +150,10 @@ if (!function_exists('cvPlaceSuggestionDisplayName')) {
                 '/^Provincia\s+/iu',
                 '/^Citt[aà]\s+Metropolitana\s+(?:di|del|della|dell[\'’]|dei|degli)\s+/iu',
                 '/^Citt[aà]\s+Metropolitana\s+/iu',
+                '/^Province\s+Of\s+/iu',
+                '/^Province\s+/iu',
+                '/^Metropolitan\s+City\s+Of\s+/iu',
+                '/^Metropolitan\s+City\s+/iu',
             ],
             '',
             $name
@@ -165,6 +169,53 @@ if (!function_exists('cvPlaceSuggestionDisplayName')) {
         }
 
         return cvPlaceDisplayLabel($clean);
+    }
+}
+
+if (!function_exists('cvPlaceNormalizeProvinceScope')) {
+    function cvPlaceNormalizeProvinceScope(string $province): string
+    {
+        $province = trim($province);
+        if ($province === '') {
+            return '';
+        }
+
+        $clean = preg_replace(
+            [
+                '/^Provincia\s+(?:di|del|della|dell[\'’]|dei|degli)\s+/iu',
+                '/^Provincia\s+/iu',
+                '/^Province\s+Of\s+/iu',
+                '/^Province\s+/iu',
+                '/^Citt[aà]\s+Metropolitana\s+(?:di|del|della|dell[\'’]|dei|degli)\s+/iu',
+                '/^Citt[aà]\s+Metropolitana\s+/iu',
+                '/^Metropolitan\s+City\s+Of\s+/iu',
+                '/^Metropolitan\s+City\s+/iu',
+            ],
+            '',
+            $province
+        );
+        $clean = is_string($clean) ? trim(preg_replace('/\s+/u', ' ', $clean) ?? $clean) : '';
+        if ($clean === '') {
+            $clean = $province;
+        }
+
+        return cvPlaceDisplayLabel($clean);
+    }
+}
+
+if (!function_exists('cvPlaceNormalizeType')) {
+    function cvPlaceNormalizeType(string $placeType): string
+    {
+        $normalized = strtolower(trim($placeType));
+        $normalized = preg_replace('/[^a-z0-9]+/', '', $normalized);
+        return is_string($normalized) ? $normalized : '';
+    }
+}
+
+if (!function_exists('cvPlaceIsMacroareaType')) {
+    function cvPlaceIsMacroareaType(string $placeType): bool
+    {
+        return cvPlaceNormalizeType($placeType) === 'macroarea';
     }
 }
 
@@ -422,6 +473,7 @@ if (!function_exists('cvPlaceExtractStopContext')) {
                 break;
             }
         }
+        $province = cvPlaceNormalizeProvinceScope($province);
 
         $country = cvPlaceArrayRead($payload, ['country_code']);
         if ($country === null) {
@@ -438,7 +490,7 @@ if (!function_exists('cvPlaceExtractStopContext')) {
             'normalized_name' => $normalized,
             'fallback_name' => cvPlaceDisplayLabel($fallback),
             'fallback_normalized' => cvPlaceNormalizeLookup($fallback),
-            'province_code' => strtoupper(trim($province)),
+            'province_code' => $province,
             'country_code' => $country,
             'has_locality' => $locality !== '',
         ];
@@ -717,10 +769,22 @@ if (!function_exists('cvPlacesGenerate')) {
             throw new RuntimeException('Le tabelle cv_places* non sono disponibili.');
         }
 
+        $macroRadiusKm = 35.0;
+        if (function_exists('cvRuntimeSettings')) {
+            $runtimeSettings = cvRuntimeSettings($connection);
+            $configuredRadius = isset($runtimeSettings['places_macroarea_capoluogo_radius_km'])
+                ? (float) $runtimeSettings['places_macroarea_capoluogo_radius_km']
+                : $macroRadiusKm;
+            if (is_finite($configuredRadius) && $configuredRadius >= 1.0) {
+                $macroRadiusKm = $configuredRadius;
+            }
+        }
+        $macroRadiusKm = max(1.0, min(300.0, $macroRadiusKm));
+
         $stops = cvPlaceFetchActiveStopsDataset($connection);
         $nameOverrides = cvPlaceFetchNameOverrideMap($connection);
         $runId = cvPlaceStartGenerationRun($connection, [
-            'algorithm_version' => 'v2',
+            'algorithm_version' => 'v3',
             'source_stops_count' => count($stops),
         ]);
 
@@ -834,10 +898,111 @@ if (!function_exists('cvPlacesGenerate')) {
         }
 
         foreach ($macroGroups as $macroKey => $group) {
-            $centroid = cvPlaceCentroid((array) ($group['stops'] ?? []));
-            $macroGroups[$macroKey]['lat'] = $centroid['lat'];
-            $macroGroups[$macroKey]['lon'] = $centroid['lon'];
-            $macroGroups[$macroKey]['radius_km'] = max(2.0, $centroid['radius_km']);
+            $children = isset($group['children']) && is_array($group['children']) ? $group['children'] : [];
+            $allStops = isset($group['stops']) && is_array($group['stops']) ? $group['stops'] : [];
+            $fallbackCentroid = cvPlaceCentroid($allStops);
+
+            $macroDisplayName = cvPlaceSuggestionDisplayName((string) ($group['name'] ?? ''), 'macroarea');
+            if ($macroDisplayName === '') {
+                $macroDisplayName = (string) ($group['name'] ?? '');
+            }
+            $macroNormalizedName = cvPlaceNormalizeLookup($macroDisplayName);
+            $macroGroups[$macroKey]['aliases'][$macroDisplayName] = $macroDisplayName;
+            $capoluogoKey = '';
+            $capoluogoLat = null;
+            $capoluogoLon = null;
+            $capoluogoBestDistance = INF;
+
+            foreach ($children as $childKey) {
+                $child = $cityGroups[(string) $childKey] ?? null;
+                if (!is_array($child)) {
+                    continue;
+                }
+
+                $childLat = isset($child['lat']) && $child['lat'] !== null ? (float) $child['lat'] : null;
+                $childLon = isset($child['lon']) && $child['lon'] !== null ? (float) $child['lon'] : null;
+                if ($childLat === null || $childLon === null) {
+                    continue;
+                }
+
+                $childNormalizedName = trim((string) ($child['normalized_name'] ?? ''));
+                if ($childNormalizedName === '') {
+                    $childNormalizedName = cvPlaceNormalizeLookup((string) ($child['name'] ?? ''));
+                }
+                if ($childNormalizedName !== $macroNormalizedName) {
+                    continue;
+                }
+
+                $distanceToFallback = 0.0;
+                if ($fallbackCentroid['lat'] !== null && $fallbackCentroid['lon'] !== null) {
+                    $distanceToFallback = cvPlaceDistanceKm(
+                        (float) $fallbackCentroid['lat'],
+                        (float) $fallbackCentroid['lon'],
+                        $childLat,
+                        $childLon
+                    );
+                }
+                if ($distanceToFallback < $capoluogoBestDistance) {
+                    $capoluogoBestDistance = $distanceToFallback;
+                    $capoluogoKey = (string) $childKey;
+                    $capoluogoLat = $childLat;
+                    $capoluogoLon = $childLon;
+                }
+            }
+
+            if (($capoluogoLat === null || $capoluogoLon === null) && $fallbackCentroid['lat'] !== null && $fallbackCentroid['lon'] !== null) {
+                $capoluogoLat = (float) $fallbackCentroid['lat'];
+                $capoluogoLon = (float) $fallbackCentroid['lon'];
+            }
+
+            $filteredChildren = [];
+            $filteredStops = [];
+            $filteredProviders = [];
+            foreach ($children as $childKey) {
+                $child = $cityGroups[(string) $childKey] ?? null;
+                if (!is_array($child)) {
+                    continue;
+                }
+
+                $include = true;
+                if ($capoluogoLat !== null && $capoluogoLon !== null && (string) $childKey !== $capoluogoKey) {
+                    $childLat = isset($child['lat']) && $child['lat'] !== null ? (float) $child['lat'] : null;
+                    $childLon = isset($child['lon']) && $child['lon'] !== null ? (float) $child['lon'] : null;
+                    if ($childLat !== null && $childLon !== null) {
+                        $distance = cvPlaceDistanceKm($capoluogoLat, $capoluogoLon, $childLat, $childLon);
+                        $include = $distance <= $macroRadiusKm;
+                    }
+                }
+
+                if (!$include) {
+                    continue;
+                }
+
+                $filteredChildren[] = (string) $childKey;
+                foreach ((array) ($child['provider_codes'] ?? []) as $providerCode => $_unused) {
+                    $providerCode = trim((string) $providerCode);
+                    if ($providerCode === '') {
+                        continue;
+                    }
+                    $filteredProviders[$providerCode] = true;
+                }
+                foreach ((array) ($child['stops'] ?? []) as $stop) {
+                    $filteredStops[] = $stop;
+                }
+            }
+
+            if (count($filteredChildren) === 0) {
+                $filteredChildren = $children;
+                $filteredStops = $allStops;
+                $filteredProviders = isset($group['provider_codes']) && is_array($group['provider_codes']) ? $group['provider_codes'] : [];
+            }
+
+            $macroGroups[$macroKey]['children'] = $filteredChildren;
+            $macroGroups[$macroKey]['stops'] = $filteredStops;
+            $macroGroups[$macroKey]['provider_codes'] = $filteredProviders;
+            $macroGroups[$macroKey]['lat'] = $capoluogoLat;
+            $macroGroups[$macroKey]['lon'] = $capoluogoLon;
+            $macroGroups[$macroKey]['radius_km'] = max(2.0, $macroRadiusKm);
         }
 
         $connection->begin_transaction();
@@ -1038,7 +1203,7 @@ if (!function_exists('cvPlacesGenerate')) {
                 'generated_macroarea_count' => count($macroGroups),
                 'generated_places_count' => count($cityGroups) + count($macroGroups),
                 'generated_links_count' => $generatedLinksCount,
-                'notes' => 'Rigenerazione automatica completata.',
+                'notes' => 'Rigenerazione automatica completata. Raggio capoluogo macroarea: ' . number_format($macroRadiusKm, 1, '.', '') . ' km.',
             ];
             cvPlaceFinishGenerationRun($connection, $runId, 'completed', $summary);
             return $summary;
@@ -1223,7 +1388,37 @@ if (!function_exists('cvPlacesFetchAdminRows')) {
         }
 
         $result->free();
-        return $rows;
+        if (count($rows) === 0) {
+            return $rows;
+        }
+
+        $macroKeys = [];
+        foreach ($rows as &$row) {
+            $placeType = (string) ($row['place_type'] ?? '');
+            $displayName = cvPlaceSuggestionDisplayName((string) ($row['name'] ?? ''), $placeType);
+            if ($displayName !== '') {
+                $row['name'] = $displayName;
+            }
+            $scope = cvPlaceNormalizeLookup((string) ($row['province_code'] ?? ''));
+            if (cvPlaceIsMacroareaType($placeType)) {
+                $macroKeys[cvPlaceNormalizeLookup($displayName) . '|' . $scope] = true;
+            }
+        }
+        unset($row);
+
+        $filtered = [];
+        foreach ($rows as $row) {
+            $placeType = (string) ($row['place_type'] ?? '');
+            $displayName = (string) ($row['name'] ?? '');
+            $scope = cvPlaceNormalizeLookup((string) ($row['province_code'] ?? ''));
+            $key = cvPlaceNormalizeLookup($displayName) . '|' . $scope;
+            if (!cvPlaceIsMacroareaType($placeType) && isset($macroKeys[$key])) {
+                continue;
+            }
+            $filtered[] = $row;
+        }
+
+        return $filtered;
     }
 }
 
@@ -1415,14 +1610,9 @@ if (!function_exists('cvPlacesFetchSearchEntries')) {
                 $provinceScope,
                 cvPlaceNormalizeLookup($displayName),
             ]);
-            if ($displayKey !== '||' && isset($seenKeys[$displayKey])) {
-                continue;
-            }
-            $seenKeys[$displayKey] = true;
-
             $stopCount = isset($row['stop_count']) ? (int) $row['stop_count'] : 0;
             $providerCount = isset($row['provider_count']) ? (int) $row['provider_count'] : 0;
-            $entries[] = [
+            $entry = [
                 'provider_code' => 'place',
                 'provider_name' => '',
                 'id' => 'place|' . (string) ($row['id_place'] ?? ''),
@@ -1441,6 +1631,17 @@ if (!function_exists('cvPlacesFetchSearchEntries')) {
                 'place_type_order' => cvPlaceTypeOrderValue($placeType),
                 'normalized_display_name' => cvPlaceNormalizeLookup($displayName),
             ];
+            if ($displayKey !== '||' && isset($seenKeys[$displayKey])) {
+                $existingIndex = (int) $seenKeys[$displayKey];
+                $existing = $entries[$existingIndex] ?? null;
+                $existingType = is_array($existing) ? (string) ($existing['place_type'] ?? '') : '';
+                if (cvPlaceIsMacroareaType($placeType) && !cvPlaceIsMacroareaType($existingType)) {
+                    $entries[$existingIndex] = $entry;
+                }
+                continue;
+            }
+            $seenKeys[$displayKey] = count($entries);
+            $entries[] = $entry;
         }
 
         $result->free();

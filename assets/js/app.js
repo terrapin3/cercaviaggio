@@ -595,6 +595,15 @@
     }
   }
 
+  function isMacroAreaType(value) {
+    var raw = String(value || '').toLowerCase();
+    if (!raw) {
+      return false;
+    }
+    var normalized = raw.replace(/[^a-z0-9]+/g, '');
+    return normalized === 'macroarea';
+  }
+
   function renderSuggestions(listEl, inputEl, hiddenEl, query, excludeStopId, options) {
     if (!listEl || !inputEl || !hiddenEl) {
       return;
@@ -611,7 +620,9 @@
     for (var i = 0; i < stops.length; i += 1) {
       var stop = stops[i];
       var stopId = String(stop.id || '');
-      if (!stopId || (excludeStopId && stopId === String(excludeStopId))) {
+      var isMacroArea = isMacroAreaType(stop.place_type);
+      var isSameStop = excludeStopId && stopId === String(excludeStopId);
+      if (!stopId || (isSameStop && !isMacroArea)) {
         continue;
       }
 
@@ -647,13 +658,11 @@
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'cv-suggestion-btn';
-        var stopType = String(stop.place_type || '').toLowerCase();
-        var isMacro = stopType === 'macroarea';
-        var kindLabel = isMacro ? 'Macroarea' : 'Fermata';
-        var subtitle = stop.provider_name ? String(stop.provider_name || '') : kindLabel;
+        var isMacro = isMacroAreaType(stop.place_type);
+        var subtitle = stop.provider_name ? String(stop.provider_name || '').trim() : '';
         button.innerHTML = ''
           + '<span class="cv-suggestion-main' + (isMacro ? ' cv-suggestion-main-macro' : '') + '">' + escapeHtml(String(stop.name || '')) + '</span>'
-          + '<span class="cv-suggestion-meta">' + escapeHtml(subtitle) + '</span>';
+          + (subtitle ? ('<span class="cv-suggestion-meta">' + escapeHtml(subtitle) + '</span>') : '');
         button.addEventListener('click', function () {
           selectStop(inputEl, hiddenEl, stop);
           hideSuggestions(listEl);
@@ -3083,21 +3092,6 @@
           toError,
           'Seleziona una fermata di destinazione dalla lista.',
           'Compila il campo Destinazione.'
-        );
-      }
-
-      if (part && arr && part === arr) {
-        setInvalid(
-          fromInput,
-          fromError,
-          'Partenza e destinazione devono essere diverse.',
-          'Partenza e destinazione non possono coincidere.'
-        );
-        setInvalid(
-          toInput,
-          toError,
-          'Partenza e destinazione devono essere diverse.',
-          'Partenza e destinazione non possono coincidere.'
         );
       }
 

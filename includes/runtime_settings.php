@@ -28,6 +28,16 @@ if (!function_exists('cvRuntimeSettingSpecs')) {
                 'step' => 0.1,
                 'unit' => 'km',
             ],
+            'places_macroarea_capoluogo_radius_km' => [
+                'label' => 'Raggio accorpamento macroarea',
+                'help' => 'Distanza massima (dal centro del capoluogo) per includere citta e fermate nella macroarea provinciale.',
+                'type' => 'float',
+                'default' => 35.0,
+                'min' => 5.0,
+                'max' => 200.0,
+                'step' => 1.0,
+                'unit' => 'km',
+            ],
             'pathfind_max_transfers' => [
                 'label' => 'Scali massimi',
                 'help' => 'Numero massimo di cambi consentiti in una soluzione.',
