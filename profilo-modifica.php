@@ -12,6 +12,8 @@ require_once __DIR__ . '/auth/config.php';
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Modifica Profilo | Cercaviaggio</title>
   <meta name="description" content="Modifica dati profilo Cercaviaggio.">
+  <?= cvRenderFaviconTags() ?>
+  <meta name="robots" content="noindex,nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -85,10 +87,8 @@ require_once __DIR__ . '/auth/config.php';
   <script>
     window.CV_STOPS = [];
     window.CV_ROUTE_INDEX = {};
-    window.CV_GOOGLE_CLIENT_ID = <?= json_encode((string) CV_GOOGLE_CLIENT_ID, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <?= cvRenderNamedAssetBundle('public-core-js') ?>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <?= cvRenderNamedAssetBundle('public-app-js') ?>
 </body>
 </html>

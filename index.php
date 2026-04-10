@@ -473,14 +473,23 @@ $stopsJson = json_encode($stops, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 if (!is_string($stopsJson)) {
     $stopsJson = '[]';
 }
+
+$seo = cvStaticSeoMeta('index.php', [
+    'title' => 'Cercaviaggio',
+    'description' => 'Motore di ricerca viaggi in autobus multi-azienda.',
+    'og_image' => '',
+]);
 ?>
 <!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cercaviaggio</title>
-  <meta name="description" content="Motore di ricerca viaggi in autobus multi-azienda.">
+  <title><?= htmlspecialchars($seo['title'], ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($seo['description'], ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
+  <?= cvRenderRobotsMetaTag($connection ?? null) ?>
+  <?= cvRenderOpenGraphMetaTags($seo['title'], $seo['description'], $seo['og_image']) ?>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -946,7 +955,6 @@ if (!is_string($stopsJson)) {
     window.CV_STOPS = <?= $stopsJson ?>;
     window.CV_TODAY_ISO = <?= json_encode($todayIso, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     window.CV_TODAY_IT = <?= json_encode($todayIt, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    window.CV_GOOGLE_CLIENT_ID = <?= json_encode((string) CV_GOOGLE_CLIENT_ID, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     (function () {
       var ticketForm = document.querySelector('form[action="./biglietti.php"]');
@@ -1041,7 +1049,6 @@ if (!is_string($stopsJson)) {
   </script>
   <?= cvRenderNamedAssetBundle('public-core-js') ?>
   <?= cvRenderNamedAssetBundle('public-date-js') ?>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <?= cvRenderNamedAssetBundle('public-app-js') ?>
 </body>
 </html>

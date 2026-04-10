@@ -208,6 +208,7 @@ $paymentPublicConfig = cvCheckoutPaymentPublicConfigSafe();
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Checkout | cercaviaggio</title>
   <meta name="robots" content="noindex,nofollow">
+  <?= cvRenderFaviconTags() ?>
   <?= cvRenderNamedAssetBundle('public-base-css') ?>
   <?= cvRenderNamedAssetBundle('public-date-css') ?>
   <?= cvRenderNamedAssetBundle('public-app-css') ?>

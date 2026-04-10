@@ -15,6 +15,8 @@ $publicLookup = $lookupCode !== '';
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= $publicLookup ? 'Recupera biglietto' : 'I miei biglietti' ?> | cercaviaggio</title>
   <meta name="description" content="Storico biglietti acquistati su cercaviaggio.">
+  <?= cvRenderFaviconTags() ?>
+  <meta name="robots" content="noindex,nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">

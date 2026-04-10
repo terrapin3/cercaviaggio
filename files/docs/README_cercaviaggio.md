@@ -18,7 +18,7 @@ This folder contains provider-side API contract and DB schema drafts.
   - Sync catalog tables (`cv_provider_*`) with unique keys `(id_provider, external_id)`.
   - Prevents overwrites between different companies.
 - `bootstrap_curcio_to_cercaviaggio_v2.sql`
-  - First data bootstrap from Curcio DB to `gestbusi_cviaggio` (provider `curcio`).
+  - First data bootstrap from Curcio DB to `cvmbexdcercavg` (provider `curcio`).
   - Loads network/rules/prices/fleet needed by `locations` and `search`.
 - `sync/config.php`
   - Importer config (DB cercaviaggio + providers endpoints).
@@ -48,10 +48,10 @@ This folder contains provider-side API contract and DB schema drafts.
 4. Then complete live checkout endpoints: `quote`, `checkout_info`, `reserve`, `book`, `booking_status`.
 
 ## Import flow (hosting separati)
-1. Import `schema_cercaviaggio_sync_v1.sql` in `gestbusi_cviaggio`.
+1. Import `schema_cercaviaggio_sync_v1.sql` in `cvmbexdcercavg`.
 2. Configure provider URL in `sync/config.php`.
 3. Run initial full sync:
-   - `php /Users/napoli/Documents/www/cercaviaggio/sync/sync_provider.php --provider=curcio --full=1`
+  - `php /Users/napoli/Documents/www/cercaviaggio/sync/sync_provider.php --provider=curcio --full=1`
 4. Add cron (example every 10 min):
    - `*/10 * * * * /usr/local/bin/php /Users/napoli/Documents/www/cercaviaggio/sync/sync_provider.php --provider=curcio >> /Users/napoli/Documents/www/cercaviaggio/sync/sync.log 2>&1`
 

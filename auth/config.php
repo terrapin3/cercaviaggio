@@ -18,11 +18,21 @@ if (!defined('CV_AUTH_SESSION_DOMAIN')) {
 }
 
 if (!defined('CV_GOOGLE_CLIENT_ID')) {
-    define('CV_GOOGLE_CLIENT_ID', '');
+    define('CV_GOOGLE_CLIENT_ID', (string) (getenv('CV_GOOGLE_CLIENT_ID') ?: '880756312929-me3btb1kv2jqte02988ho45gdefpqfb8.apps.googleusercontent.com'));
 }
 
 if (!defined('CV_GOOGLE_CLIENT_IDS')) {
-    define('CV_GOOGLE_CLIENT_IDS', []);
+    $rawGoogleClientIds = trim((string) (getenv('CV_GOOGLE_CLIENT_IDS') ?: ''));
+    $googleClientIds = [];
+    if ($rawGoogleClientIds !== '') {
+        foreach (explode(',', $rawGoogleClientIds) as $part) {
+            $candidate = trim($part);
+            if ($candidate !== '') {
+                $googleClientIds[] = $candidate;
+            }
+        }
+    }
+    define('CV_GOOGLE_CLIENT_IDS', $googleClientIds);
 }
 
 if (!defined('CV_PARTNER_LEAD_NOTIFY_EMAIL')) {

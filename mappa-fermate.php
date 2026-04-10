@@ -4,9 +4,15 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/site_layout.php';
 require_once __DIR__ . '/includes/conn.php';
+require_once __DIR__ . '/includes/runtime_settings.php';
 
 $stops = [];
 $markers = [];
+$seo = cvStaticSeoMeta('mappa-fermate.php', [
+    'title' => 'Mappa fermate | Cercaviaggio',
+    'description' => 'Mappa completa delle fermate attive presenti su Cercaviaggio.',
+    'og_image' => '',
+]);
 
 try {
     $connection = cvDbConnection();
@@ -38,9 +44,11 @@ foreach ($stops as $stop) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mappa fermate | Cercaviaggio</title>
-  <meta name="description" content="Mappa completa delle fermate attive presenti su Cercaviaggio.">
-  <link rel="canonical" href="<?= htmlspecialchars(rtrim(cvBaseUrl(), '/') . '/mappa-fermate.php', ENT_QUOTES, 'UTF-8') ?>">
+  <title><?= htmlspecialchars($seo['title'], ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($seo['description'], ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
+  <?= cvRenderRobotsMetaTag() ?>
+  <?= cvRenderOpenGraphMetaTags($seo['title'], $seo['description'], $seo['og_image']) ?>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">

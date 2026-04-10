@@ -87,7 +87,14 @@ HTML;
 if (!function_exists('cvRenderSiteAuthModals')) {
     function cvRenderSiteAuthModals(): string
     {
-        return <<<'HTML'
+        $googleClientId = '';
+        if (function_exists('cvGoogleClientIdPublic')) {
+            $googleClientId = cvGoogleClientIdPublic();
+        } elseif (defined('CV_GOOGLE_CLIENT_ID')) {
+            $googleClientId = trim((string) CV_GOOGLE_CLIENT_ID);
+        }
+
+        $html = <<<'HTML'
   <div class="modal fade" id="authModal" tabindex="-1" aria-labelledby="authModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content cv-modal cv-auth-modal">
@@ -132,7 +139,7 @@ if (!function_exists('cvRenderSiteAuthModals')) {
                 <i class="bi bi-google me-2"></i>
                 Continua con Google
               </button>
-              <small class="cv-auth-note">Struttura pronta. Attivazione OAuth nel prossimo step.</small>
+              <small class="cv-auth-note">Accedi con il tuo account Google.</small>
             </div>
 
             <div class="tab-pane fade" id="auth-register-pane" role="tabpanel" aria-labelledby="auth-register-tab" tabindex="0">
@@ -214,6 +221,10 @@ if (!function_exists('cvRenderSiteAuthModals')) {
     </div>
   </div>
 HTML;
+
+        $html .= "\n<script>window.CV_GOOGLE_CLIENT_ID = " . json_encode($googleClientId, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ";</script>\n";
+        $html .= "<script src=\"https://accounts.google.com/gsi/client\" async defer></script>\n";
+        return $html;
     }
 }
 

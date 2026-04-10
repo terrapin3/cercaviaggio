@@ -103,6 +103,33 @@ if (!function_exists('cvRuntimeSettingSpecs')) {
                 'type' => 'string',
                 'default' => '',
             ],
+            'seo_discourage_indexing' => [
+                'label' => 'SEO: scoraggia indicizzazione',
+                'help' => '0 permette l’indicizzazione, 1 aggiunge meta robots noindex,nofollow su tutte le pagine pubbliche.',
+                'type' => 'int',
+                'default' => 0,
+                'min' => 0,
+                'max' => 1,
+                'step' => 1,
+            ],
+            'seo_static_page_meta_json' => [
+                'label' => 'SEO: meta pagine statiche (JSON)',
+                'help' => 'JSON con title/description/og_image per pagina (es. {"chi-siamo.php":{"title":"...","description":"...","og_image":"images/seo/cover.jpg"}}).',
+                'type' => 'string',
+                'default' => '',
+            ],
+            'auth_google_client_id' => [
+                'label' => 'Google Login: Client ID',
+                'help' => 'Client ID OAuth Web di Google Cloud usato nel frontend per il bottone "Continua con Google".',
+                'type' => 'string',
+                'default' => '',
+            ],
+            'auth_google_client_ids_csv' => [
+                'label' => 'Google Login: Client IDs extra',
+                'help' => 'Lista separata da virgola di audience consentite lato API (opzionale).',
+                'type' => 'string',
+                'default' => '',
+            ],
             'checkout_provider_commission_percent' => [
                 'label' => 'Commissione checkout per provider',
                 'help' => 'Mappa JSON con commissione percentuale trattenuta da Cercaviaggio per provider (es: {"curcio":5.5,"leonetti":4}).',

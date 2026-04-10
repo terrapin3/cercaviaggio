@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Cercaviaggio</title>
+  <circle cx="32" cy="32" r="32" fill="#13A8B5"/>
+  <path d="M44 21.5a16 16 0 1 0 0 21" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+</svg>

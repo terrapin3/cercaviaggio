@@ -3,6 +3,11 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
+# Force HTTPS (works both direct SSL and behind proxies)
+RewriteCond %{HTTPS} off [OR]
+RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
+
 RewriteRule ^tratte-autobus/?$ tratte-autobus.php [L,QSA,NC]
 RewriteRule ^tratte-autobus/([a-z0-9-]+)/?$ tratta.php?slug=$1 [L,QSA,NC]
 RewriteRule ^blog/?$ blog.php [L,QSA,NC]

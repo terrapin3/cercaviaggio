@@ -3,14 +3,25 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/auth/config.php';
+require_once __DIR__ . '/includes/conn.php';
+require_once __DIR__ . '/includes/runtime_settings.php';
+
+$seo = cvStaticSeoMeta('partner.php', [
+    'title' => 'Diventa Partner | Cercaviaggio',
+    'description' => "Richiedi l'onboarding come azienda partner su Cercaviaggio.",
+    'og_image' => '',
+]);
 ?>
 <!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Diventa Partner | Cercaviaggio</title>
-  <meta name="description" content="Richiedi l'onboarding come azienda partner su Cercaviaggio.">
+  <title><?= htmlspecialchars($seo['title'], ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($seo['description'], ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
+  <?= cvRenderRobotsMetaTag() ?>
+  <?= cvRenderOpenGraphMetaTags($seo['title'], $seo['description'], $seo['og_image']) ?>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -98,10 +109,8 @@ require_once __DIR__ . '/auth/config.php';
   <script>
     window.CV_STOPS = [];
     window.CV_ROUTE_INDEX = {};
-    window.CV_GOOGLE_CLIENT_ID = <?= json_encode((string) CV_GOOGLE_CLIENT_ID, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <?= cvRenderNamedAssetBundle('public-core-js') ?>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <?= cvRenderNamedAssetBundle('public-app-js') ?>
 </body>
 </html>

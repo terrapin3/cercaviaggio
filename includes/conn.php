@@ -10,10 +10,10 @@ if (function_exists('date_default_timezone_set')) {
 }
 
 if (!defined('CV_DB_HOST')) {
-    define('CV_DB_HOST', 'localhost');
-    define('CV_DB_NAME', 'gestbusi_cviaggio');
-    define('CV_DB_USER', 'gestbusi_cviaggio');
-    define('CV_DB_PASS', 'N@poli_78');
+    define('CV_DB_HOST', 'cvmbexdcercavg.mysql.db');
+    define('CV_DB_NAME', 'cvmbexdcercavg');
+    define('CV_DB_USER', 'cvmbexdcercavg');
+    define('CV_DB_PASS', 'Napoli1978');
     define('CV_DB_PORT', 3306);
 }
 

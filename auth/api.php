@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/conn.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/../includes/error_log_tools.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/runtime_settings.php';
 require_once __DIR__ . '/../includes/provider_quote.php';
 require_once __DIR__ . '/../includes/pathfind.php';
 require_once __DIR__ . '/../includes/assistant_tools.php';
@@ -7594,7 +7595,7 @@ function cvAuthHandleProfileUpdate(mysqli $connection): void
     cvAuthResponse(true, 'Profilo aggiornato con successo.', ['user' => $user]);
 }
 
-function cvAuthGoogleClientIds(): array
+function cvAuthGoogleClientIds(?mysqli $connection = null): array
 {
     $ids = [];
 
@@ -7622,6 +7623,30 @@ function cvAuthGoogleClientIds(): array
             if ($candidate !== '') {
                 $ids[] = $candidate;
             }
+        }
+    }
+
+    if ($connection instanceof mysqli && function_exists('cvRuntimeSettings')) {
+        try {
+            $settings = cvRuntimeSettings($connection);
+
+            $runtimeOne = trim((string) ($settings['auth_google_client_id'] ?? ''));
+            if ($runtimeOne !== '') {
+                $ids[] = $runtimeOne;
+            }
+
+            $runtimeCsv = trim((string) ($settings['auth_google_client_ids_csv'] ?? ''));
+            if ($runtimeCsv !== '') {
+                $parts = explode(',', $runtimeCsv);
+                foreach ($parts as $part) {
+                    $candidate = trim($part);
+                    if ($candidate !== '') {
+                        $ids[] = $candidate;
+                    }
+                }
+            }
+        } catch (Throwable $exception) {
+            // ignore runtime settings errors
         }
     }
 
@@ -7726,7 +7751,7 @@ function cvAuthHttpGetJson(string $url): ?array
     return is_array($decoded) ? $decoded : null;
 }
 
-function cvAuthVerifyGoogleIdToken(string $idToken): ?array
+function cvAuthVerifyGoogleIdToken(string $idToken, ?mysqli $connection = null): ?array
 {
     $url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($idToken);
     $tokenInfo = cvAuthHttpGetJson($url);
@@ -7740,7 +7765,7 @@ function cvAuthVerifyGoogleIdToken(string $idToken): ?array
         return null;
     }
 
-    $clientIds = cvAuthGoogleClientIds();
+    $clientIds = cvAuthGoogleClientIds($connection);
     if (count($clientIds) > 0) {
         $audience = (string) ($tokenInfo['aud'] ?? '');
         if ($audience === '' || !in_array($audience, $clientIds, true)) {
@@ -7765,7 +7790,7 @@ function cvAuthHandleGoogle(mysqli $connection): void
         cvAuthResponse(false, 'Token Google mancante.', [], 'VALIDATION_ERROR', 422);
     }
 
-    $tokenInfo = cvAuthVerifyGoogleIdToken($idToken);
+    $tokenInfo = cvAuthVerifyGoogleIdToken($idToken, $connection);
     if (!is_array($tokenInfo)) {
         cvAuthResponse(false, 'Token Google non valido o configurazione assente.', [], 'GOOGLE_TOKEN_INVALID', 401);
     }

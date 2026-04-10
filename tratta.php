@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/site_layout.php';
 require_once __DIR__ . '/includes/conn.php';
+require_once __DIR__ . '/includes/runtime_settings.php';
 
 $slug = trim((string) ($_GET['slug'] ?? ''));
 $page = null;
@@ -57,6 +58,10 @@ if (is_array($page)) {
     http_response_code(404);
     $robotsContent = 'noindex,nofollow';
 }
+
+if (cvSeoDiscourageIndexing($connection ?? null)) {
+    $robotsContent = 'noindex,nofollow';
+}
 ?>
 <!doctype html>
 <html lang="it">
@@ -65,6 +70,7 @@ if (is_array($page)) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
   <meta name="robots" content="<?= htmlspecialchars($robotsContent, ENT_QUOTES, 'UTF-8') ?>">
   <link rel="canonical" href="<?= htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8') ?>">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">

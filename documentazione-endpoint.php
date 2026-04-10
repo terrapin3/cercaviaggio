@@ -3,9 +3,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/site_layout.php';
+require_once __DIR__ . '/includes/conn.php';
+require_once __DIR__ . '/includes/runtime_settings.php';
 
 $updatedAt = (new DateTime('now', new DateTimeZone('Europe/Rome')))->format('d/m/Y');
 $contractVersion = 'v1';
+$seo = cvStaticSeoMeta('documentazione-endpoint.php', [
+    'title' => 'Documentazione Endpoint Provider | Cercaviaggio',
+    'description' => 'Contratto tecnico degli endpoint provider richiesti da Cercaviaggio.',
+    'og_image' => '',
+]);
 
 /**
  * @param array<string,mixed> $payload
@@ -261,8 +268,11 @@ $quoteResponseExample = [
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Documentazione Endpoint Provider | Cercaviaggio</title>
-  <meta name="description" content="Contratto tecnico degli endpoint provider richiesti da Cercaviaggio.">
+  <title><?= htmlspecialchars($seo['title'], ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($seo['description'], ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
+  <?= cvRenderRobotsMetaTag() ?>
+  <?= cvRenderOpenGraphMetaTags($seo['title'], $seo['description'], $seo['og_image']) ?>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">

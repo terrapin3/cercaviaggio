@@ -1677,10 +1677,56 @@
 
     if (googleLoginBtn) {
       var googleBusy = false;
+      var googleSdkLoading = false;
+      var googleSdkReadyCallbacks = [];
+
+      function loadGoogleSdkIfNeeded(onReady, onError) {
+        if (window.google && window.google.accounts && window.google.accounts.id) {
+          if (typeof onReady === 'function') {
+            onReady();
+          }
+          return;
+        }
+
+        if (typeof onReady === 'function') {
+          googleSdkReadyCallbacks.push(onReady);
+        }
+
+        if (googleSdkLoading) {
+          return;
+        }
+
+        googleSdkLoading = true;
+        var sdkScript = document.createElement('script');
+        sdkScript.src = 'https://accounts.google.com/gsi/client';
+        sdkScript.async = true;
+        sdkScript.defer = true;
+        sdkScript.onload = function () {
+          googleSdkLoading = false;
+          var callbacks = googleSdkReadyCallbacks.slice(0);
+          googleSdkReadyCallbacks = [];
+          for (var idx = 0; idx < callbacks.length; idx += 1) {
+            try {
+              callbacks[idx]();
+            } catch (err) {
+              // ignore single callback errors
+            }
+          }
+        };
+        sdkScript.onerror = function () {
+          googleSdkLoading = false;
+          googleSdkReadyCallbacks = [];
+          if (typeof onError === 'function') {
+            onError();
+          }
+        };
+        document.head.appendChild(sdkScript);
+      }
 
       function handleGoogleCredentialResponse(response) {
         if (!response || !response.credential) {
           googleBusy = false;
+          googleLoginBtn.disabled = false;
           showMsg('Token Google non disponibile.', 0);
           return;
         }
@@ -1714,31 +1760,38 @@
 
         var clientId = String(window.CV_GOOGLE_CLIENT_ID || '').trim();
         if (!clientId) {
-          showMsg('Configura CV_GOOGLE_CLIENT_ID per attivare Google login.', 0);
-          return;
-        }
-
-        if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-          showMsg('SDK Google non caricato.', 0);
+          showMsg('Configura Google Client ID in Accesso > Frontend & SEO.', 0);
           return;
         }
 
         googleBusy = true;
         googleLoginBtn.disabled = true;
+        loadGoogleSdkIfNeeded(function () {
+          if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+            googleBusy = false;
+            googleLoginBtn.disabled = false;
+            showMsg('SDK Google non disponibile.', 0);
+            return;
+          }
 
-        try {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleGoogleCredentialResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true
-          });
-          window.google.accounts.id.prompt();
-        } catch (error) {
+          try {
+            window.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: handleGoogleCredentialResponse,
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
+            window.google.accounts.id.prompt();
+          } catch (error) {
+            googleBusy = false;
+            googleLoginBtn.disabled = false;
+            showMsg('Errore inizializzazione Google login.', 0);
+          }
+        }, function () {
           googleBusy = false;
           googleLoginBtn.disabled = false;
-          showMsg('Errore inizializzazione Google login.', 0);
-        }
+          showMsg('Impossibile caricare SDK Google.', 0);
+        });
       });
     }
   }

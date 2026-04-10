@@ -3,14 +3,25 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/site_layout.php';
+require_once __DIR__ . '/includes/conn.php';
+require_once __DIR__ . '/includes/runtime_settings.php';
+
+$seo = cvStaticSeoMeta('privacy.php', [
+    'title' => 'Privacy Policy | Cercaviaggio',
+    'description' => 'Informativa privacy di Cercaviaggio.',
+    'og_image' => '',
+]);
 ?>
 <!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy Policy | Cercaviaggio</title>
-  <meta name="description" content="Informativa privacy di Cercaviaggio.">
+  <title><?= htmlspecialchars($seo['title'], ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($seo['description'], ENT_QUOTES, 'UTF-8') ?>">
+  <?= cvRenderFaviconTags() ?>
+  <?= cvRenderRobotsMetaTag() ?>
+  <?= cvRenderOpenGraphMetaTags($seo['title'], $seo['description'], $seo['og_image']) ?>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">

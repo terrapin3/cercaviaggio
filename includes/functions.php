@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/place_tools.php';
 require_once __DIR__ . '/runtime_settings.php';
+if (is_file(dirname(__DIR__) . '/auth/config.php')) {
+    require_once dirname(__DIR__) . '/auth/config.php';
+}
 
 if (!function_exists('cvProjectRootPath')) {
     function cvProjectRootPath(): string
@@ -51,12 +54,218 @@ if (!function_exists('cvBasePath')) {
 }
 
 if (!function_exists('cvBaseUrl')) {
+    function cvIsHttpsRequest(): bool
+    {
+        if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+            return true;
+        }
+
+        $forwardedProto = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')));
+        if ($forwardedProto === 'https') {
+            return true;
+        }
+
+        $forwardedSsl = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')));
+        if ($forwardedSsl === 'on' || $forwardedSsl === '1') {
+            return true;
+        }
+
+        return false;
+    }
+
     function cvBaseUrl(): string
     {
-        $isHttps = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
-        $scheme = $isHttps ? 'https' : 'http';
+        $scheme = cvIsHttpsRequest() ? 'https' : 'http';
         $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : 'localhost';
         return $scheme . '://' . $host . cvBasePath();
+    }
+}
+
+if (!function_exists('cvRenderFaviconTags')) {
+    function cvRenderFaviconTags(): string
+    {
+        $faviconSvg = htmlspecialchars(cvAssetRelativeUrl('images/favicon.svg'), ENT_QUOTES, 'UTF-8');
+        return '<link rel="icon" href="' . $faviconSvg . '" type="image/svg+xml">' . "\n";
+    }
+}
+
+if (!function_exists('cvGoogleClientIdPublic')) {
+    function cvGoogleClientIdPublic(?mysqli $connection = null): string
+    {
+        static $cached = null;
+        if (is_string($cached)) {
+            return $cached;
+        }
+
+        $clientId = '';
+
+        if (function_exists('cvRuntimeSettings') && function_exists('cvDbConnection')) {
+            try {
+                $connection = $connection instanceof mysqli ? $connection : cvDbConnection();
+                $settings = cvRuntimeSettings($connection);
+                $runtimeClientId = trim((string) ($settings['auth_google_client_id'] ?? ''));
+                if ($runtimeClientId !== '') {
+                    $clientId = $runtimeClientId;
+                }
+            } catch (Throwable $exception) {
+                // ignore runtime fallback errors
+            }
+        }
+
+        if ($clientId === '' && defined('CV_GOOGLE_CLIENT_ID')) {
+            $clientId = trim((string) CV_GOOGLE_CLIENT_ID);
+        }
+        if ($clientId === '') {
+            $clientId = trim((string) (getenv('CV_GOOGLE_CLIENT_ID') ?: ''));
+        }
+
+        $cached = $clientId;
+        return $cached;
+    }
+}
+
+if (!function_exists('cvSeoDiscourageIndexing')) {
+    function cvSeoDiscourageIndexing(?mysqli $connection = null): bool
+    {
+        if (!function_exists('cvRuntimeSettings') || !function_exists('cvDbConnection')) {
+            return false;
+        }
+
+        try {
+            $connection = $connection instanceof mysqli ? $connection : cvDbConnection();
+            $settings = cvRuntimeSettings($connection);
+            return (int) ($settings['seo_discourage_indexing'] ?? 0) === 1;
+        } catch (Throwable $exception) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('cvRenderRobotsMetaTag')) {
+    function cvRenderRobotsMetaTag(?mysqli $connection = null): string
+    {
+        if (!cvSeoDiscourageIndexing($connection)) {
+            return '';
+        }
+
+        return "<meta name=\"robots\" content=\"noindex,nofollow\">\n";
+    }
+}
+
+if (!function_exists('cvStaticSeoMetaFromSettings')) {
+    /**
+     * @param array<string,mixed> $runtimeSettings
+     * @param array<string,string> $defaults
+     * @return array<string,string>
+     */
+    function cvStaticSeoMetaFromSettings(array $runtimeSettings, string $pageKey, array $defaults): array
+    {
+        $raw = (string) ($runtimeSettings['seo_static_page_meta_json'] ?? '');
+        if (trim($raw) === '') {
+            return $defaults;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return $defaults;
+        }
+
+        $entry = $decoded[$pageKey] ?? null;
+        if (!is_array($entry)) {
+            return $defaults;
+        }
+
+        $title = trim((string) ($entry['title'] ?? ''));
+        $description = trim((string) ($entry['description'] ?? ''));
+        $ogImage = trim((string) ($entry['og_image'] ?? ''));
+
+        return [
+            'title' => $title !== '' ? $title : ($defaults['title'] ?? ''),
+            'description' => $description !== '' ? $description : ($defaults['description'] ?? ''),
+            'og_image' => $ogImage !== '' ? $ogImage : ($defaults['og_image'] ?? ''),
+        ];
+    }
+}
+
+if (!function_exists('cvStaticSeoMeta')) {
+    /**
+     * @param array<string,string> $defaults
+     * @return array<string,string>
+     */
+    function cvStaticSeoMeta(string $pageKey, array $defaults, ?mysqli $connection = null): array
+    {
+        if (!function_exists('cvRuntimeSettings') || !function_exists('cvDbConnection')) {
+            return $defaults;
+        }
+
+        try {
+            $connection = $connection instanceof mysqli ? $connection : cvDbConnection();
+            $settings = cvRuntimeSettings($connection);
+            return cvStaticSeoMetaFromSettings($settings, $pageKey, $defaults);
+        } catch (Throwable $exception) {
+            return $defaults;
+        }
+    }
+}
+
+if (!function_exists('cvSeoResolveImageUrl')) {
+    function cvSeoResolveImageUrl(string $pathOrUrl): string
+    {
+        $value = trim($pathOrUrl);
+        if ($value === '') {
+            return '';
+        }
+
+        $lower = strtolower($value);
+        if (str_starts_with($lower, 'http://') || str_starts_with($lower, 'https://') || str_starts_with($value, '//')) {
+            return $value;
+        }
+
+        $relative = ltrim($value, '/');
+        if (str_starts_with($relative, 'assets/')) {
+            $relative = substr($relative, strlen('assets/'));
+        }
+        if (!str_starts_with($relative, 'images/')) {
+            $relative = 'images/' . $relative;
+        }
+
+        return cvAsset($relative);
+    }
+}
+
+if (!function_exists('cvRenderOpenGraphMetaTags')) {
+    function cvRenderOpenGraphMetaTags(string $title, string $description, string $ogImage = ''): string
+    {
+        $title = trim($title);
+        $description = trim($description);
+        $ogImageUrl = cvSeoResolveImageUrl($ogImage);
+
+        $canonical = rtrim(cvBaseUrl(), '/') . (string) ($_SERVER['REQUEST_URI'] ?? '/');
+        $canonicalEsc = htmlspecialchars($canonical, ENT_QUOTES, 'UTF-8');
+
+        $html = '<link rel="canonical" href="' . $canonicalEsc . "\">\n";
+        if ($title !== '') {
+            $titleEsc = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+            $html .= "<meta property=\"og:title\" content=\"{$titleEsc}\">\n";
+            $html .= "<meta name=\"twitter:title\" content=\"{$titleEsc}\">\n";
+        }
+        if ($description !== '') {
+            $descEsc = htmlspecialchars($description, ENT_QUOTES, 'UTF-8');
+            $html .= "<meta property=\"og:description\" content=\"{$descEsc}\">\n";
+            $html .= "<meta name=\"twitter:description\" content=\"{$descEsc}\">\n";
+        }
+        $html .= "<meta property=\"og:type\" content=\"website\">\n";
+        $html .= "<meta property=\"og:url\" content=\"{$canonicalEsc}\">\n";
+        if ($ogImageUrl !== '') {
+            $imgEsc = htmlspecialchars($ogImageUrl, ENT_QUOTES, 'UTF-8');
+            $html .= "<meta property=\"og:image\" content=\"{$imgEsc}\">\n";
+            $html .= "<meta name=\"twitter:image\" content=\"{$imgEsc}\">\n";
+            $html .= "<meta name=\"twitter:card\" content=\"summary_large_image\">\n";
+        } else {
+            $html .= "<meta name=\"twitter:card\" content=\"summary\">\n";
+        }
+
+        return $html;
     }
 }
 
@@ -581,6 +790,48 @@ if (!function_exists('cvSitemapStatus')) {
             'size' => $exists ? (int) (@filesize($path) ?: 0) : 0,
             'modified_at' => $exists ? (int) (@filemtime($path) ?: 0) : 0,
             'pages' => cvSitemapDefinitions(),
+        ];
+    }
+}
+
+if (!function_exists('cvRobotsTxtContent')) {
+    function cvRobotsTxtContent(): string
+    {
+        $baseUrl = rtrim(cvBaseUrl(), '/');
+        $discourage = cvSeoDiscourageIndexing();
+        $lines = [
+            'User-agent: *',
+            $discourage ? 'Disallow: /' : 'Allow: /',
+            'Sitemap: ' . $baseUrl . '/sitemap.xml',
+        ];
+
+        return implode("\n", $lines) . "\n";
+    }
+}
+
+if (!function_exists('cvRobotsWriteFile')) {
+    function cvRobotsWriteFile(): bool
+    {
+        $content = cvRobotsTxtContent();
+        return @file_put_contents(cvProjectRootPath() . '/robots.txt', $content, LOCK_EX) !== false;
+    }
+}
+
+if (!function_exists('cvRobotsStatus')) {
+    /**
+     * @return array<string,mixed>
+     */
+    function cvRobotsStatus(): array
+    {
+        $path = cvProjectRootPath() . '/robots.txt';
+        $exists = is_file($path);
+        return [
+            'path' => $path,
+            'url' => rtrim(cvBaseUrl(), '/') . '/robots.txt',
+            'exists' => $exists,
+            'size' => $exists ? (int) (@filesize($path) ?: 0) : 0,
+            'modified_at' => $exists ? (int) (@filemtime($path) ?: 0) : 0,
+            'discourage_indexing' => cvSeoDiscourageIndexing(),
         ];
     }
 }
