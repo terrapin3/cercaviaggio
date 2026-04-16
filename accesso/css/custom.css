@@ -241,6 +241,77 @@ body.simple-page {
     font-weight: 600;
 }
 
+.cv-typeahead {
+    position: relative;
+}
+
+.cv-typeahead-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #d7e2ec;
+    border-radius: 10px;
+    box-shadow: 0 16px 32px rgba(32, 51, 77, 0.12);
+    max-height: 260px;
+    overflow: auto;
+}
+
+.cv-typeahead-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 10px 12px;
+    color: #243447;
+    cursor: pointer;
+}
+
+.cv-typeahead-item:hover,
+.cv-typeahead-item:focus {
+    background: #f0f6ff;
+    outline: none;
+}
+
+.cv-typeahead-item small {
+    display: block;
+    color: #7c8fa3;
+    margin-top: 2px;
+}
+
+.cv-toast-msg {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 2000;
+    max-width: min(520px, calc(100vw - 28px));
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(32, 51, 77, 0.18);
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    font-weight: 600;
+}
+
+.cv-toast-msg.cv-toast-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.cv-toast-success {
+    background: #1a8d5a;
+}
+
+.cv-toast-error {
+    background: #d9534f;
+}
+
 .cv-table {
     margin-bottom: 0;
 }

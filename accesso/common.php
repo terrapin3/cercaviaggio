@@ -1037,6 +1037,52 @@ if (!function_exists('cvAccessoFilterProviders')) {
     }
 }
 
+if (!function_exists('cvAccessoHasManualIntegration')) {
+function cvAccessoHasManualIntegration(array $state): bool
+{
+    static $cache = null;
+    $key = cvAccessoIsAdmin($state) ? '*' : implode(',', cvAccessoAllowedProviderCodes($state));
+    if (is_array($cache) && array_key_exists($key, $cache)) {
+        return (bool) $cache[$key];
+    }
+    if (!is_array($cache)) {
+        $cache = [];
+    }
+
+    try {
+        $connection = cvAccessoRequireConnection();
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+            return false;
+        }
+
+        $allowed = cvAccessoIsAdmin($state) ? [] : cvAccessoAllowedProviderCodes($state);
+        $allowed = cvCacheNormalizeProviderCodes($allowed);
+
+        $where = ["integration_mode = 'manual'"];
+        if (!cvAccessoIsAdmin($state) && count($allowed) > 0 && !in_array('*', $allowed, true)) {
+            $esc = [];
+            foreach ($allowed as $code) {
+                $esc[] = "'" . $connection->real_escape_string((string) $code) . "'";
+            }
+            if (count($esc) > 0) {
+                $where[] = "code IN (" . implode(',', $esc) . ")";
+            }
+        }
+
+        $sql = "SELECT 1 FROM cv_providers WHERE " . implode(' AND ', $where) . " LIMIT 1";
+        $result = $connection->query($sql);
+        if (!$result instanceof mysqli_result) {
+            $cache[$key] = false;
+            return false;
+        }
+        $has = $result->num_rows > 0;
+        $result->free();
+        $cache[$key] = $has;
+        return $has;
+    }
+}
+
 if (!function_exists('cvAccessoNavItems')) {
     /**
      * @return array<int,array<string,mixed>>
@@ -1069,6 +1115,37 @@ if (!function_exists('cvAccessoNavItems')) {
             ['slug' => 'cache', 'label' => 'Cache', 'href' => cvAccessoUrl('cache.php'), 'icon' => 'fa-database'],
             ['slug' => 'statistics', 'label' => 'Statistiche', 'href' => cvAccessoUrl('statistiche.php'), 'icon' => 'fa-bar-chart'],
         ];
+
+        if (cvAccessoHasManualIntegration($state)) {
+            $items[] = [
+                'slug' => 'integration-root',
+                'label' => 'Integrazione',
+                'href' => '#',
+                'icon' => 'fa-plug',
+                'children' => [
+                    [
+                        'slug' => 'integration-stops',
+                        'label' => 'Fermate',
+                        'href' => cvAccessoUrl('integrazione_fermate.php'),
+                    ],
+                    [
+                        'slug' => 'integration-lines',
+                        'label' => 'Linee',
+                        'href' => cvAccessoUrl('integrazione_linee.php'),
+                    ],
+                    [
+                        'slug' => 'integration-trips',
+                        'label' => 'Corse',
+                        'href' => cvAccessoUrl('integrazione_corse.php'),
+                    ],
+                    [
+                        'slug' => 'integration-fares',
+                        'label' => 'Tariffe',
+                        'href' => cvAccessoUrl('integrazione_tariffe.php'),
+                    ],
+                ],
+            ];
+        }
 
         if (cvAccessoIsAdmin($state)) {
             $items[] = [

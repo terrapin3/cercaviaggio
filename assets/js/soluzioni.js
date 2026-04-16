@@ -43,10 +43,13 @@
   var stageLabelEl = document.getElementById('currentStageLabel');
   var countLabelEl = document.getElementById('solutionsCountLabel');
   var resultsLayoutEl = document.getElementById('resultsLayout');
+  var dateTabsRowEl = document.getElementById('dateTabsRow');
+  var solutionsMetaRowEl = document.getElementById('solutionsMetaRow');
   var progressWrapEl = document.getElementById('solutionsProgressWrap');
   var progressBarEl = document.getElementById('solutionsProgressBar');
   var progressLabelEl = document.getElementById('solutionsProgressLabel');
   var progressCountEl = document.getElementById('solutionsProgressCount');
+  var filtersToggleBtnEl = document.querySelector('[data-bs-target="#solutionsFilters"]');
 
   var selectedOutboundBody = document.getElementById('selectedOutboundBody');
   var selectedReturnBody = document.getElementById('selectedReturnBody');
@@ -660,11 +663,37 @@
   }
 
   function updateResultsVisibility() {
-    if (!resultsLayoutEl) {
-      return;
+    var shouldHide = isSelectionComplete() && summaryOnly;
+
+    if (resultsLayoutEl) {
+      resultsLayoutEl.classList.toggle('cv-results-layout-summary-only', shouldHide);
     }
 
-    resultsLayoutEl.classList.remove('cv-results-layout-summary-only');
+    if (filtersToggleBtnEl) {
+      filtersToggleBtnEl.classList.toggle('d-none', shouldHide);
+    }
+
+    if (dateTabsRowEl) {
+      dateTabsRowEl.classList.toggle('d-none', shouldHide);
+    }
+    if (solutionsMetaRowEl) {
+      solutionsMetaRowEl.classList.toggle('d-none', shouldHide);
+    }
+    if (listEl) {
+      listEl.classList.toggle('d-none', shouldHide);
+    }
+
+    if (shouldHide) {
+      if (progressWrapEl) {
+        progressWrapEl.classList.add('d-none');
+      }
+      if (alertEl) {
+        alertEl.classList.add('d-none');
+      }
+      if (emptyEl) {
+        emptyEl.classList.add('d-none');
+      }
+    }
   }
 
   function currentSolutions() {
@@ -1678,7 +1707,7 @@
     }
 
     if (summaryCollapseEl && window.bootstrap && bootstrap.Collapse) {
-      if ((out || ret) && !summaryAutoOpened) {
+      if (isSelectionComplete() && !summaryAutoOpened) {
         bootstrap.Collapse.getOrCreateInstance(summaryCollapseEl, { toggle: false }).show();
         summaryAutoOpened = true;
       } else if (!out && !ret) {
@@ -1756,6 +1785,9 @@
 
         persistSelectionState();
         showAlert('Soluzione selezionata.', 'success');
+        if (isSelectionComplete()) {
+          summaryOnly = true;
+        }
         updateSelectedStrip();
         render();
       })
@@ -1883,6 +1915,7 @@
 
     if (editOutboundBtn) {
       editOutboundBtn.addEventListener('click', function () {
+        summaryOnly = false;
         setStage('outbound');
         persistSelectionState();
       });
@@ -1890,6 +1923,7 @@
 
     if (editReturnBtn) {
       editReturnBtn.addEventListener('click', function () {
+        summaryOnly = false;
         setStage('return');
         persistSelectionState();
       });
@@ -1995,7 +2029,7 @@
     bindDateTabsActions();
     bindPassengersActions();
     restoreSelectionState();
-    summaryOnly = false;
+    summaryOnly = isSelectionComplete();
     renderDateTabs();
     normalizePriceRangeForStage();
     updateSelectedStrip();

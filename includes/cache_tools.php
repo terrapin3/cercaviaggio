@@ -254,12 +254,18 @@ if (!function_exists('cvCacheFetchProviders')) {
      */
     function cvCacheFetchProviders(mysqli $connection): array
     {
-        $sql = "SELECT id_provider, code, name, base_url, api_key, is_active, last_sync_at, last_error
+        $sql = "SELECT id_provider, code, name, base_url, api_key, integration_mode, manual_max_lines, manual_max_trips, is_active, last_sync_at, last_error
                 FROM cv_providers
                 ORDER BY is_active DESC, code ASC";
         $result = $connection->query($sql);
         if (!$result instanceof mysqli_result) {
-            return [];
+            $fallbackSql = "SELECT id_provider, code, name, base_url, api_key, is_active, last_sync_at, last_error
+                            FROM cv_providers
+                            ORDER BY is_active DESC, code ASC";
+            $result = $connection->query($fallbackSql);
+            if (!$result instanceof mysqli_result) {
+                return [];
+            }
         }
 
         $rows = [];
@@ -274,6 +280,9 @@ if (!function_exists('cvCacheFetchProviders')) {
                 'name' => (string) ($row['name'] ?? ''),
                 'base_url' => (string) ($row['base_url'] ?? ''),
                 'api_key' => (string) ($row['api_key'] ?? ''),
+                'integration_mode' => (string) ($row['integration_mode'] ?? 'api'),
+                'manual_max_lines' => isset($row['manual_max_lines']) ? (int) $row['manual_max_lines'] : 0,
+                'manual_max_trips' => isset($row['manual_max_trips']) ? (int) $row['manual_max_trips'] : 0,
                 'is_active' => isset($row['is_active']) ? (int) $row['is_active'] : 0,
                 'last_sync_at' => (string) ($row['last_sync_at'] ?? ''),
                 'last_error' => (string) ($row['last_error'] ?? ''),

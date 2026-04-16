@@ -281,6 +281,12 @@ try {
                 $name = trim((string) ($_POST['provider_name_new'] ?? ''));
                 $baseUrl = trim((string) ($_POST['provider_base_url_new'] ?? ''));
                 $isActive = ((int) ($_POST['provider_is_active_new'] ?? 1)) > 0 ? 1 : 0;
+                $integrationMode = strtolower(trim((string) ($_POST['provider_integration_mode_new'] ?? 'api')));
+                if ($integrationMode !== 'manual') {
+                    $integrationMode = 'api';
+                }
+                $manualMaxLines = max(0, (int) ($_POST['provider_manual_max_lines_new'] ?? 0));
+                $manualMaxTrips = max(0, (int) ($_POST['provider_manual_max_trips_new'] ?? 0));
                 $aziendaDetails = [
                     'ind' => trim((string) ($_POST['provider_company_ind_new'] ?? '')),
                     'tel' => trim((string) ($_POST['provider_company_tel_new'] ?? '')),
@@ -289,17 +295,23 @@ try {
                     'recapiti' => trim((string) ($_POST['provider_company_recapiti_new'] ?? '')),
                 ];
 
-                if ($code === '' || $name === '' || $baseUrl === '') {
-                    $state['errors'][] = 'Code, nome ed endpoint API provider sono obbligatori.';
+                if ($integrationMode === 'manual') {
+                    $baseUrl = '';
+                }
+
+                if ($code === '' || $name === '' || ($integrationMode === 'api' && $baseUrl === '')) {
+                    $state['errors'][] = $integrationMode === 'api'
+                        ? 'Code, nome ed endpoint API provider sono obbligatori.'
+                        : 'Code e nome provider sono obbligatori.';
                 } else {
                     $insertProvider = $connection->prepare(
-                        "INSERT INTO cv_providers (code, name, base_url, api_key, is_active)
-                         VALUES (?, ?, ?, '', ?)"
+                        "INSERT INTO cv_providers (code, name, base_url, api_key, integration_mode, manual_max_lines, manual_max_trips, is_active)
+                         VALUES (?, ?, ?, '', ?, ?, ?, ?)"
                     );
                     if (!$insertProvider instanceof mysqli_stmt) {
                         $state['errors'][] = 'Provider: errore prepare INSERT.';
                     } else {
-                        $insertProvider->bind_param('sssi', $code, $name, $baseUrl, $isActive);
+                        $insertProvider->bind_param('ssssiii', $code, $name, $baseUrl, $integrationMode, $manualMaxLines, $manualMaxTrips, $isActive);
                         if (!$insertProvider->execute()) {
                             $state['errors'][] = 'Provider: inserimento fallito (' . $insertProvider->error . ').';
                         } else {
@@ -319,6 +331,12 @@ try {
                 $name = trim((string) ($_POST['provider_name'] ?? ''));
                 $baseUrl = trim((string) ($_POST['provider_base_url'] ?? ''));
                 $isActive = ((int) ($_POST['provider_is_active'] ?? 0)) > 0 ? 1 : 0;
+                $integrationMode = strtolower(trim((string) ($_POST['provider_integration_mode'] ?? 'api')));
+                if ($integrationMode !== 'manual') {
+                    $integrationMode = 'api';
+                }
+                $manualMaxLines = max(0, (int) ($_POST['provider_manual_max_lines'] ?? 0));
+                $manualMaxTrips = max(0, (int) ($_POST['provider_manual_max_trips'] ?? 0));
                 $aziendaDetails = [
                     'ind' => trim((string) ($_POST['provider_company_ind'] ?? '')),
                     'tel' => trim((string) ($_POST['provider_company_tel'] ?? '')),
@@ -327,7 +345,11 @@ try {
                     'recapiti' => trim((string) ($_POST['provider_company_recapiti'] ?? '')),
                 ];
 
-                if ($providerId <= 0 || $code === '' || $name === '' || $baseUrl === '') {
+                if ($integrationMode === 'manual') {
+                    $baseUrl = '';
+                }
+
+                if ($providerId <= 0 || $code === '' || $name === '' || ($integrationMode === 'api' && $baseUrl === '')) {
                     $state['errors'][] = 'Dati provider non validi.';
                 } else {
                     $oldCode = '';
@@ -353,14 +375,14 @@ try {
 
                     $updateProvider = $connection->prepare(
                         "UPDATE cv_providers
-                         SET code = ?, name = ?, base_url = ?, is_active = ?
+                         SET code = ?, name = ?, base_url = ?, integration_mode = ?, manual_max_lines = ?, manual_max_trips = ?, is_active = ?
                          WHERE id_provider = ?
                          LIMIT 1"
                     );
                     if (!$updateProvider instanceof mysqli_stmt) {
                         $state['errors'][] = 'Provider: errore prepare UPDATE.';
                     } else {
-                        $updateProvider->bind_param('sssii', $code, $name, $baseUrl, $isActive, $providerId);
+                        $updateProvider->bind_param('ssssiiii', $code, $name, $baseUrl, $integrationMode, $manualMaxLines, $manualMaxTrips, $isActive, $providerId);
                         if (!$updateProvider->execute()) {
                             $state['errors'][] = 'Provider: update fallito (' . $updateProvider->error . ').';
                         } else {
@@ -372,6 +394,64 @@ try {
                             }
                         }
                         $updateProvider->close();
+                    }
+                }
+            } elseif ($action === 'purge_manual_provider_content') {
+                $providerId = (int) ($_POST['provider_id'] ?? 0);
+                $providerCode = strtolower(trim((string) ($_POST['provider_code'] ?? '')));
+                $confirm = strtoupper(trim((string) ($_POST['confirm_token'] ?? '')));
+
+                if ($providerId <= 0 || $providerCode === '') {
+                    $state['errors'][] = 'Provider non valido per pulizia contenuti.';
+                } elseif ($confirm !== 'ELIMINA') {
+                    $state['errors'][] = 'Conferma non valida. Scrivi ELIMINA per procedere.';
+                } else {
+                    $stmt = $connection->prepare(
+                        "SELECT id_provider, code, integration_mode
+                         FROM cv_providers
+                         WHERE id_provider = ? AND code = ?
+                         LIMIT 1"
+                    );
+                    $row = null;
+                    if ($stmt instanceof mysqli_stmt) {
+                        $stmt->bind_param('is', $providerId, $providerCode);
+                        if ($stmt->execute()) {
+                            $res = $stmt->get_result();
+                            if ($res instanceof mysqli_result) {
+                                $row = $res->fetch_assoc();
+                                $res->free();
+                            }
+                        }
+                        $stmt->close();
+                    }
+
+                    $mode = is_array($row) ? strtolower(trim((string) ($row['integration_mode'] ?? 'api'))) : 'api';
+                    if (!is_array($row) || $mode !== 'manual') {
+                        $state['errors'][] = 'La pulizia è disponibile solo per provider con Integrazione = Interfaccia.';
+                    } else {
+                        $connection->begin_transaction();
+                        try {
+                            $tables = [
+                                'cv_provider_trip_stops',
+                                'cv_provider_trips',
+                                'cv_provider_fares',
+                                'cv_provider_lines',
+                                'cv_provider_stops',
+                            ];
+
+                            foreach ($tables as $table) {
+                                $sql = "DELETE FROM {$table} WHERE id_provider = " . (int) $providerId;
+                                if (!$connection->query($sql)) {
+                                    throw new RuntimeException('Errore pulizia tabella ' . $table . ': ' . $connection->error);
+                                }
+                            }
+
+                            $connection->commit();
+                            $state['messages'][] = 'Contenuti provider eliminati (stops/linee/corse/tariffe).';
+                        } catch (Throwable $e) {
+                            $connection->rollback();
+                            $state['errors'][] = 'Pulizia fallita: ' . $e->getMessage();
+                        }
                     }
                 }
             } elseif ($action === 'save_provider_commission') {
@@ -546,6 +626,9 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                         $providerId = (int) ($provider['id_provider'] ?? 0);
                         $providerIsActive = (int) ($provider['is_active'] ?? 0) === 1;
                         $providerBaseUrl = trim((string) ($provider['base_url'] ?? ''));
+                        $providerIntegrationMode = strtolower(trim((string) ($provider['integration_mode'] ?? 'api'))) === 'manual' ? 'manual' : 'api';
+                        $providerManualMaxLines = max(0, (int) ($provider['manual_max_lines'] ?? 0));
+                        $providerManualMaxTrips = max(0, (int) ($provider['manual_max_trips'] ?? 0));
                         $mappedAzienda = $providerCode !== '' && isset($aziendeByCode[$providerCode]) ? $aziendeByCode[$providerCode] : null;
                         $mapped = is_array($mappedAzienda);
                         $commissionValue = isset($providerCommissionPercents[$providerCode]) ? (float) $providerCommissionPercents[$providerCode] : 0.0;
@@ -560,6 +643,9 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                         $pdfShowEmailId = 'provider_pdf_email_' . $providerId;
                         $pdfShowSiteId = 'provider_pdf_site_' . $providerId;
                         $pdfSiteUrlId = 'provider_pdf_site_url_' . $providerId;
+                        $integrationModeId = 'provider_integration_mode_' . $providerId;
+                        $manualLimitsRowId = 'provider_manual_limits_' . $providerId;
+                        $apiEndpointRowId = 'provider_api_endpoint_' . $providerId;
                         $pdfShowEmail = isset($ticketPdfShowEmailMap[$providerCode]) ? ((int) $ticketPdfShowEmailMap[$providerCode] === 1) : false;
                         $pdfShowSite = isset($ticketPdfShowSiteMap[$providerCode]) ? ((int) $ticketPdfShowSiteMap[$providerCode] === 1) : false;
                         $pdfSiteUrl = isset($ticketPdfSiteUrlMap[$providerCode]) ? trim((string) $ticketPdfSiteUrlMap[$providerCode]) : '';
@@ -576,6 +662,11 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                                         <span class="cv-badge-active">Attivo</span>
                                     <?php else: ?>
                                         <span class="cv-badge-inactive">Disattivo</span>
+                                    <?php endif; ?>
+                                    <?php if ($providerIntegrationMode === 'manual'): ?>
+                                        <span class="cv-badge-active">Interfaccia</span>
+                                    <?php else: ?>
+                                        <span class="cv-badge-inactive">API</span>
                                     <?php endif; ?>
                                     <?php if ($mapped): ?>
                                         <span class="cv-badge-active">Azienda allineata</span>
@@ -599,12 +690,27 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                                                     <label>Code</label>
                                                     <input type="text" class="form-control" name="provider_code" value="<?= cvAccessoH((string) ($provider['code'] ?? '')) ?>"<?= cvAccessoIsAdmin($state) ? '' : ' readonly' ?>>
                                                 </div>
-                                                <div class="col-md-4 form-group">
+                                                <div class="col-md-3 form-group">
                                                     <label>Nome</label>
                                                     <input type="text" class="form-control" name="provider_name" value="<?= cvAccessoH((string) ($provider['name'] ?? '')) ?>"<?= cvAccessoIsAdmin($state) ? '' : ' readonly' ?>>
                                                 </div>
-                                                <div class="col-md-4 form-group">
-                                                    <label>Endpoint API provider</label>
+                                                <div class="col-md-2 form-group">
+                                                    <label>Integrazione</label>
+                                                    <select
+                                                        id="<?= cvAccessoH($integrationModeId) ?>"
+                                                        class="form-control"
+                                                        name="provider_integration_mode"
+                                                        data-cv-integration-mode
+                                                        data-cv-target="<?= cvAccessoH($manualLimitsRowId) ?>"
+                                                        data-cv-endpoint-target="<?= cvAccessoH($apiEndpointRowId) ?>"
+                                                        <?= cvAccessoIsAdmin($state) ? '' : ' disabled' ?>
+                                                    >
+                                                        <option value="api"<?= $providerIntegrationMode === 'api' ? ' selected' : '' ?>>API</option>
+                                                        <option value="manual"<?= $providerIntegrationMode === 'manual' ? ' selected' : '' ?>>Interfaccia</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3 form-group" id="<?= cvAccessoH($apiEndpointRowId) ?>"<?= $providerIntegrationMode === 'manual' ? ' style="display:none;"' : '' ?>>
+                                                    <label>Endpoint API provider (solo API)</label>
                                                     <input type="text" class="form-control" name="provider_base_url" value="<?= cvAccessoH($providerBaseUrl) ?>"<?= cvAccessoIsAdmin($state) ? '' : ' readonly' ?>>
                                                     <?php if ($providerBaseUrl !== ''): ?>
                                                         <div class="cv-muted" style="margin-top:6px;">
@@ -615,7 +721,7 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                                                         </div>
                                                     <?php else: ?>
                                                         <div class="cv-muted" style="margin-top:6px;">
-                                                            Endpoint non configurato.
+                                                            Endpoint non configurato (ok per Interfaccia).
                                                         </div>
                                                     <?php endif; ?>
                                                 </div>
@@ -625,6 +731,19 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                                                         <option value="1"<?= $providerIsActive ? ' selected' : '' ?>>Attivo</option>
                                                         <option value="0"<?= !$providerIsActive ? ' selected' : '' ?>>Disattivo</option>
                                                     </select>
+                                                </div>
+                                            </div>
+                                            <div class="row" id="<?= cvAccessoH($manualLimitsRowId) ?>"<?= $providerIntegrationMode === 'manual' ? '' : ' style="display:none;"' ?>>
+                                                <div class="col-md-3 form-group">
+                                                    <label>Limite linee (0 = illimitato)</label>
+                                                    <input type="number" class="form-control" name="provider_manual_max_lines" min="0" step="1" value="<?= cvAccessoH((string) $providerManualMaxLines) ?>"<?= cvAccessoIsAdmin($state) ? '' : ' readonly' ?>>
+                                                </div>
+                                                <div class="col-md-3 form-group">
+                                                    <label>Limite corse (0 = illimitato)</label>
+                                                    <input type="number" class="form-control" name="provider_manual_max_trips" min="0" step="1" value="<?= cvAccessoH((string) $providerManualMaxTrips) ?>"<?= cvAccessoIsAdmin($state) ? '' : ' readonly' ?>>
+                                                </div>
+                                                <div class="col-md-6 form-group cv-muted" style="margin-top:28px;">
+                                                    Limiti usati solo se <strong>Integrazione = Interfaccia</strong>.
                                                 </div>
                                             </div>
                                             <div class="row">
@@ -659,6 +778,42 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                                         </form>
                                     </div>
                                 </div>
+
+                                <?php if ($providerIntegrationMode === 'manual'): ?>
+                                    <div class="row" style="margin-top:10px;">
+                                        <div class="col-md-12">
+                                            <h5>Integrazione (Interfaccia)</h5>
+                                            <div class="cv-muted">
+                                                Gestisci contenuti manuali (fermate/linee/corse/tariffe) usati in ricerca.
+                                            </div>
+                                            <div class="cv-inline-actions" style="margin-top:8px;">
+                                                <a class="btn btn-default btn-sm" href="<?= cvAccessoH(cvAccessoUrl('integrazione_fermate.php') . '?provider=' . urlencode($providerCode)) ?>">Fermate</a>
+                                                <a class="btn btn-default btn-sm" href="<?= cvAccessoH(cvAccessoUrl('integrazione_linee.php') . '?provider=' . urlencode($providerCode)) ?>">Linee</a>
+                                                <a class="btn btn-default btn-sm" href="<?= cvAccessoH(cvAccessoUrl('integrazione_corse.php') . '?provider=' . urlencode($providerCode)) ?>">Corse</a>
+                                                <a class="btn btn-default btn-sm" href="<?= cvAccessoH(cvAccessoUrl('integrazione_tariffe.php') . '?provider=' . urlencode($providerCode)) ?>">Tariffe</a>
+                                            </div>
+
+                                            <div class="alert alert-warning" style="margin-top:12px;">
+                                                <strong>Zona pericolosa:</strong> pulisce tutti i contenuti manuali del provider.
+                                            </div>
+                                            <form method="post" class="cv-form-grid">
+                                                <input type="hidden" name="action" value="purge_manual_provider_content">
+                                                <input type="hidden" name="provider_id" value="<?= (int) $providerId ?>">
+                                                <input type="hidden" name="provider_code" value="<?= cvAccessoH($providerCode) ?>">
+                                                <?= cvAccessoCsrfField() ?>
+                                                <div class="row">
+                                                    <div class="col-md-4 form-group">
+                                                        <label>Conferma</label>
+                                                        <input type="text" class="form-control" name="confirm_token" placeholder="Scrivi ELIMINA">
+                                                    </div>
+                                                    <div class="col-md-4 form-group" style="margin-top:26px;">
+                                                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Confermi la pulizia contenuti manuali?')">Pulisci contenuti</button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
 
                                 <div class="row" style="margin-top:8px;">
                                     <div class="col-md-4">
@@ -826,7 +981,7 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
 
 <?php if (cvAccessoIsAdmin($state)): ?>
     <div class="cv-side-drawer-backdrop" data-cv-drawer-close="providers-add-drawer"></div>
-    <aside id="providers-add-drawer" class="cv-side-drawer" aria-hidden="true">
+	    <aside id="providers-add-drawer" class="cv-side-drawer" aria-hidden="true">
         <div class="cv-side-drawer-head">
             <h4>Aggiungi provider / azienda</h4>
             <button type="button" class="btn btn-default btn-sm" data-cv-drawer-close="providers-add-drawer">
@@ -836,7 +991,7 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
         <p class="cv-muted cv-provider-tools-note">
             Viene creata la configurazione provider e viene sincronizzata automaticamente anche la tabella <code>aziende</code>.
         </p>
-        <form method="post" class="cv-form-grid">
+	        <form method="post" class="cv-form-grid">
             <input type="hidden" name="action" value="add_provider">
             <?= cvAccessoCsrfField() ?>
             <div class="form-group">
@@ -847,9 +1002,24 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                 <label>Nome</label>
                 <input type="text" class="form-control" name="provider_name_new" placeholder="TTI Leonetti">
             </div>
-            <div class="form-group">
-                <label>Endpoint API provider</label>
+	            <div class="form-group">
+	                <label>Integrazione</label>
+	                <select
+	                    id="provider_integration_mode_new"
+	                    class="form-control"
+	                    name="provider_integration_mode_new"
+	                    data-cv-integration-mode
+	                    data-cv-target="provider_manual_limits_new"
+	                    data-cv-endpoint-target="provider_api_endpoint_new"
+	                >
+	                    <option value="api" selected>API</option>
+	                    <option value="manual">Interfaccia</option>
+	                </select>
+	            </div>
+            <div class="form-group" id="provider_api_endpoint_new">
+                <label>Endpoint API provider (solo API)</label>
                 <input type="text" class="form-control" name="provider_base_url_new" placeholder="https://.../rest/cercaviaggio/api2.php">
+                <div class="cv-muted" style="margin-top:6px;">Se scegli Interfaccia puoi lasciarlo vuoto.</div>
             </div>
             <div class="form-group">
                 <label>Stato</label>
@@ -858,6 +1028,17 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
                     <option value="0">Disattivo</option>
                 </select>
             </div>
+	            <div id="provider_manual_limits_new" style="display:none;">
+	                <div class="form-group">
+	                    <label>Limite linee (0 = illimitato)</label>
+	                    <input type="number" class="form-control" name="provider_manual_max_lines_new" min="0" step="1" value="0">
+	                </div>
+	                <div class="form-group">
+	                    <label>Limite corse (0 = illimitato)</label>
+	                    <input type="number" class="form-control" name="provider_manual_max_trips_new" min="0" step="1" value="0">
+	                </div>
+	                <div class="cv-muted" style="margin-top:6px;">Limiti usati solo con Integrazione = Interfaccia.</div>
+	            </div>
             <div class="form-group">
                 <label>Indirizzo azienda</label>
                 <input type="text" class="form-control" name="provider_company_ind_new" placeholder="Via Roma 1, Napoli">
@@ -887,6 +1068,37 @@ cvAccessoRenderPageStart('Provider', 'providers', $state);
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    function toggleManualLimits(selectEl) {
+        if (!selectEl) {
+            return;
+        }
+        var targetId = selectEl.getAttribute('data-cv-target');
+        if (!targetId) {
+            return;
+        }
+        var target = document.getElementById(targetId);
+        if (!target) {
+            return;
+        }
+        var endpointTargetId = selectEl.getAttribute('data-cv-endpoint-target');
+        var endpointTarget = endpointTargetId ? document.getElementById(endpointTargetId) : null;
+        var isManual = String(selectEl.value || '') === 'manual';
+        target.style.display = isManual ? '' : 'none';
+        if (endpointTarget) {
+            endpointTarget.style.display = isManual ? 'none' : '';
+        }
+    }
+
+    var integrationSelects = document.querySelectorAll('select[data-cv-integration-mode][data-cv-target]');
+    for (var i = 0; i < integrationSelects.length; i += 1) {
+        (function (selectEl) {
+            toggleManualLimits(selectEl);
+            selectEl.addEventListener('change', function () {
+                toggleManualLimits(selectEl);
+            });
+        })(integrationSelects[i]);
+    }
+
     var rangeSliders = document.querySelectorAll('.cv-range-slider[data-number-target]');
     for (var r = 0; r < rangeSliders.length; r += 1) {
         (function (slider) {

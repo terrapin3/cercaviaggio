@@ -1,6 +1,33 @@
 (function (window, document) {
     'use strict';
 
+    if (typeof window.showMsg !== 'function') {
+        window.showMsg = function (text, ok) {
+            var msg = String(text || '').trim();
+            if (!msg) {
+                return;
+            }
+
+            var root = document.getElementById('cv-toast-msg');
+            if (!root) {
+                root = document.createElement('div');
+                root.id = 'cv-toast-msg';
+                root.className = 'cv-toast-msg';
+                document.body.appendChild(root);
+            }
+
+            root.textContent = msg;
+            root.classList.remove('cv-toast-success', 'cv-toast-error');
+            root.classList.add(ok ? 'cv-toast-success' : 'cv-toast-error');
+            root.classList.add('cv-toast-show');
+
+            window.clearTimeout(window.showMsg._timer);
+            window.showMsg._timer = window.setTimeout(function () {
+                root.classList.remove('cv-toast-show');
+            }, 3200);
+        };
+    }
+
     function updateToggleButton(button, input) {
         var icon = button.querySelector('i');
         var isVisible = input.type === 'text';

@@ -3615,6 +3615,8 @@ function cvAuthTicketChatRouteFollowupType(string $message): string
 
 function cvAuthTicketChatDebugLog(string $stage, array $payload = []): void
 {
+    return;
+
     $line = '[cv-chat-operator][' . $stage . '] ';
     $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encoded) || $encoded === '') {
