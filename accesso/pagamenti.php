@@ -85,11 +85,19 @@ try {
             }
 
             $nextSettings = $settings;
-            foreach ($providerMaps as $key => $value) {
-                $nextSettings[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            }
+            $allowProviderPaymentSettingsUpdate = cvAccessoIsAdmin($state);
 
             if (cvAccessoIsAdmin($state)) {
+                $marketplacePaymentModeRaw = strtolower(trim((string) ($_POST['checkout_marketplace_payment_mode'] ?? 'marketplace_split')));
+                $marketplacePaymentMode = $marketplacePaymentModeRaw === 'marketplace_single' ? 'marketplace_single' : 'marketplace_split';
+                $nextSettings['checkout_marketplace_payment_mode'] = $marketplacePaymentMode;
+
+                $hideProviderPaymentSettings = ((int) ($_POST['checkout_hide_provider_payment_settings'] ?? 0)) > 0 ? 1 : 0;
+                $nextSettings['checkout_hide_provider_payment_settings'] = $hideProviderPaymentSettings;
+                if ($hideProviderPaymentSettings === 1) {
+                    $allowProviderPaymentSettingsUpdate = false;
+                }
+
                 $marketplacePaypalEnv = strtolower(trim((string) ($_POST['checkout_marketplace_paypal_env'] ?? 'live')));
                 if (!in_array($marketplacePaypalEnv, ['sandbox', 'live'], true)) {
                     $marketplacePaypalEnv = 'live';
@@ -110,6 +118,12 @@ try {
                 $nextSettings['checkout_marketplace_stripe_publishable_key'] = trim((string) ($_POST['checkout_marketplace_stripe_publishable_key'] ?? ''));
                 $nextSettings['checkout_marketplace_stripe_secret_key'] = trim((string) ($_POST['checkout_marketplace_stripe_secret_key'] ?? ''));
                 $nextSettings['checkout_marketplace_stripe_webhook_secret'] = trim((string) ($_POST['checkout_marketplace_stripe_webhook_secret'] ?? ''));
+            }
+
+            if ($allowProviderPaymentSettingsUpdate) {
+                foreach ($providerMaps as $key => $value) {
+                    $nextSettings[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
             }
 
             $settings = cvRuntimeSavePaymentSettings($connection, $nextSettings);
@@ -147,26 +161,85 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
     <div class="col-md-12">
         <div class="cv-panel-card">
             <h4>Pagamenti checkout</h4>
-            <form method="post" class="cv-form-grid">
-                <input type="hidden" name="action" value="save_payments">
-                <?= cvAccessoCsrfField() ?>
+	            <form method="post" class="cv-form-grid">
+	                <input type="hidden" name="action" value="save_payments">
+	                <?= cvAccessoCsrfField() ?>
 
-                <ul class="nav nav-tabs" role="tablist" style="margin-bottom:14px;">
-                    <li role="presentation" class="active">
-                        <a href="#cv-paypal-tab" aria-controls="cv-paypal-tab" role="tab" data-toggle="tab">PayPal</a>
-                    </li>
+	                <?php
+	                $currentPaymentMode = strtolower(trim((string) ($settings['checkout_marketplace_payment_mode'] ?? 'marketplace_split')));
+	                if (!in_array($currentPaymentMode, ['marketplace_split', 'marketplace_single'], true)) {
+	                    $currentPaymentMode = 'marketplace_split';
+	                }
+	                $hideProviderPaymentSettings = ((int) ($settings['checkout_hide_provider_payment_settings'] ?? 0)) === 1;
+	                $showProviderPaymentSettings = cvAccessoIsAdmin($state) && !$hideProviderPaymentSettings;
+	                ?>
+
+	                <?php if (cvAccessoIsAdmin($state)): ?>
+	                    <div class="row" style="margin-top:6px;">
+	                        <div class="col-md-12">
+	                            <h5 style="margin-top:0;">Modalita incasso</h5>
+	                            <input type="hidden" name="checkout_marketplace_payment_mode" value="marketplace_split">
+	                            <label class="cv-assistant-live-switch" for="checkout_marketplace_payment_mode">
+	                                <input
+	                                    id="checkout_marketplace_payment_mode"
+	                                    name="checkout_marketplace_payment_mode"
+	                                    type="checkbox"
+	                                    value="marketplace_single"
+	                                    <?= $currentPaymentMode === 'marketplace_single' ? 'checked' : '' ?>
+	                                >
+	                                <span class="cv-assistant-live-switch-track" aria-hidden="true"></span>
+	                                <span class="cv-assistant-live-switch-text">
+	                                    <?= $currentPaymentMode === 'marketplace_single' ? 'Solo a cercaviaggio' : 'Splitta il pagamento' ?>
+	                                </span>
+	                            </label>
+	                            <div class="cv-muted" style="margin-top:10px;">
+	                                Se attivo "Solo a cercaviaggio", il checkout invia un unico pagamento a Cercaviaggio e nel riepilogo non viene mostrata la commissione.
+	                            </div>
+	                        </div>
+	                    </div>
+
+	                    <div class="row" style="margin-top:14px;">
+	                        <div class="col-md-12">
+	                            <h5 style="margin-top:0;">Visibilita pagamenti provider</h5>
+	                            <input type="hidden" name="checkout_hide_provider_payment_settings" value="0">
+	                            <label class="cv-assistant-live-switch" for="checkout_hide_provider_payment_settings">
+	                                <input
+	                                    id="checkout_hide_provider_payment_settings"
+	                                    name="checkout_hide_provider_payment_settings"
+	                                    type="checkbox"
+	                                    value="1"
+	                                    <?= $hideProviderPaymentSettings ? 'checked' : '' ?>
+	                                >
+	                                <span class="cv-assistant-live-switch-track" aria-hidden="true"></span>
+	                                <span class="cv-assistant-live-switch-text">
+	                                    <?= $hideProviderPaymentSettings ? 'Configurazione provider nascosta' : 'Configurazione provider visibile' ?>
+	                                </span>
+	                            </label>
+	                            <div class="cv-muted" style="margin-top:10px;">
+	                                Quando attivo, vengono nascoste tutte le sezioni di configurazione pagamenti dei provider (anche ai provider).
+	                            </div>
+	                        </div>
+	                    </div>
+
+	                    <hr>
+	                <?php endif; ?>
+
+	                <ul class="nav nav-tabs" role="tablist" style="margin-bottom:14px;">
+	                    <li role="presentation" class="active">
+	                        <a href="#cv-paypal-tab" aria-controls="cv-paypal-tab" role="tab" data-toggle="tab">PayPal</a>
+	                    </li>
                     <li role="presentation">
                         <a href="#cv-stripe-tab" aria-controls="cv-stripe-tab" role="tab" data-toggle="tab">Stripe</a>
                     </li>
                 </ul>
 
-                <div class="tab-content">
-                    <div role="tabpanel" class="tab-pane active" id="cv-paypal-tab">
-                        <?php if (cvAccessoIsAdmin($state)): ?>
-                            <h5 style="margin-top:0;">Cercaviaggio marketplace - PayPal</h5>
-                            <div class="row">
-                                <div class="col-md-2 form-group">
-                                    <label for="checkout_marketplace_paypal_env">Ambiente</label>
+	                <div class="tab-content">
+	                    <div role="tabpanel" class="tab-pane active" id="cv-paypal-tab">
+	                        <?php if (cvAccessoIsAdmin($state)): ?>
+	                            <h5 style="margin-top:0;">Cercaviaggio marketplace - PayPal</h5>
+	                            <div class="row">
+	                                <div class="col-md-2 form-group">
+	                                    <label for="checkout_marketplace_paypal_env">Ambiente</label>
                                     <select id="checkout_marketplace_paypal_env" name="checkout_marketplace_paypal_env" class="form-control">
                                         <option value="live"<?= (($paymentConfig['paypal']['env'] ?? 'live') === 'live') ? ' selected' : '' ?>>Live</option>
                                         <option value="sandbox"<?= (($paymentConfig['paypal']['env'] ?? '') === 'sandbox') ? ' selected' : '' ?>>Sandbox</option>
@@ -226,11 +299,12 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
                             <hr>
                         <?php endif; ?>
 
-                        <h5>Provider - PayPal</h5>
-                        <?php if (count($providers) === 0): ?>
-                            <div class="cv-empty">Nessun provider disponibile per il tuo account.</div>
-                        <?php else: ?>
-                            <?php foreach ($providers as $index => $provider): ?>
+	                        <?php if ($showProviderPaymentSettings): ?>
+	                            <h5>Provider - PayPal</h5>
+	                            <?php if (count($providers) === 0): ?>
+	                                <div class="cv-empty">Nessun provider disponibile per il tuo account.</div>
+	                            <?php else: ?>
+	                                <?php foreach ($providers as $index => $provider): ?>
                                 <?php
                                 $providerCode = strtolower(trim((string) ($provider['code'] ?? '')));
                                 $providerName = trim((string) ($provider['name'] ?? $providerCode));
@@ -302,9 +376,10 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
                                         </div>
                                     </div>
                                 </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+	                                <?php endforeach; ?>
+	                            <?php endif; ?>
+	                        <?php endif; ?>
+	                    </div>
 
                     <div role="tabpanel" class="tab-pane" id="cv-stripe-tab">
                         <?php if (cvAccessoIsAdmin($state)): ?>
@@ -337,11 +412,12 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
                             <hr>
                         <?php endif; ?>
 
-                        <h5>Provider - Stripe</h5>
-                        <?php if (count($providers) === 0): ?>
-                            <div class="cv-empty">Nessun provider disponibile per il tuo account.</div>
-                        <?php else: ?>
-                            <?php foreach ($providers as $index => $provider): ?>
+	                        <?php if ($showProviderPaymentSettings): ?>
+	                            <h5>Provider - Stripe</h5>
+	                            <?php if (count($providers) === 0): ?>
+	                                <div class="cv-empty">Nessun provider disponibile per il tuo account.</div>
+	                            <?php else: ?>
+	                                <?php foreach ($providers as $index => $provider): ?>
                                 <?php
                                 $providerCode = strtolower(trim((string) ($provider['code'] ?? '')));
                                 $providerName = trim((string) ($provider['name'] ?? $providerCode));
@@ -373,9 +449,10 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
                                         </div>
                                     </div>
                                 </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+	                                <?php endforeach; ?>
+	                            <?php endif; ?>
+	                        <?php endif; ?>
+	                    </div>
                 </div>
 
                 <div class="form-actions">

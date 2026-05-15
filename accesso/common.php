@@ -1089,8 +1089,8 @@ if (!function_exists('cvAccessoNavItems')) {
      */
     function cvAccessoNavItems(array $state): array
     {
-        $items = [
-            ['slug' => 'index', 'label' => 'Dashboard', 'href' => cvAccessoUrl('index.php'), 'icon' => 'fa-home'],
+	        $items = [
+	            ['slug' => 'index', 'label' => 'Dashboard', 'href' => cvAccessoUrl('index.php'), 'icon' => 'fa-home'],
             [
                 'slug' => 'tickets-root',
                 'label' => 'Biglietti',
@@ -1109,45 +1109,87 @@ if (!function_exists('cvAccessoNavItems')) {
                     ],
                 ],
             ],
-            ['slug' => 'providers', 'label' => 'Provider', 'href' => cvAccessoUrl('providers.php'), 'icon' => 'fa-building'],
-            ['slug' => 'homepage-featured', 'label' => 'Vetrina home', 'href' => cvAccessoUrl('homepage.php'), 'icon' => 'fa-star'],
-            ['slug' => 'sync', 'label' => 'Sync', 'href' => cvAccessoUrl('sync.php'), 'icon' => 'fa-refresh'],
-            ['slug' => 'cache', 'label' => 'Cache', 'href' => cvAccessoUrl('cache.php'), 'icon' => 'fa-database'],
-            ['slug' => 'statistics', 'label' => 'Statistiche', 'href' => cvAccessoUrl('statistiche.php'), 'icon' => 'fa-bar-chart'],
-        ];
+	            ['slug' => 'providers', 'label' => 'Provider', 'href' => cvAccessoUrl('providers.php'), 'icon' => 'fa-building'],
+	            ['slug' => 'homepage-featured', 'label' => 'Vetrina home', 'href' => cvAccessoUrl('homepage.php'), 'icon' => 'fa-star'],
+	            cvAccessoIsAdmin($state)
+	                ? [
+	                    'slug' => 'statistics-root',
+	                    'label' => 'Statistiche',
+	                    'href' => '#',
+	                    'icon' => 'fa-bar-chart',
+	                    'children' => [
+	                        [
+	                            'slug' => 'statistics',
+	                            'label' => 'Panoramica',
+	                            'href' => cvAccessoUrl('statistiche.php'),
+	                        ],
+	                        [
+	                            'slug' => 'statistics-provider',
+	                            'label' => 'Netto provider',
+	                            'href' => cvAccessoUrl('statistiche-provider.php'),
+	                        ],
+	                    ],
+	                ]
+	                : ['slug' => 'statistics', 'label' => 'Statistiche', 'href' => cvAccessoUrl('statistiche.php'), 'icon' => 'fa-bar-chart'],
+	        ];
 
+        $integrationChildren = [];
         if (cvAccessoHasManualIntegration($state)) {
-            $items[] = [
-                'slug' => 'integration-root',
-                'label' => 'Integrazione',
-                'href' => '#',
-                'icon' => 'fa-plug',
-                'children' => [
-                    [
-                        'slug' => 'integration-stops',
-                        'label' => 'Fermate',
-                        'href' => cvAccessoUrl('integrazione_fermate.php'),
-                    ],
-                    [
-                        'slug' => 'integration-lines',
-                        'label' => 'Linee',
-                        'href' => cvAccessoUrl('integrazione_linee.php'),
-                    ],
-                    [
-                        'slug' => 'integration-trips',
-                        'label' => 'Corse',
-                        'href' => cvAccessoUrl('integrazione_corse.php'),
-                    ],
-                    [
-                        'slug' => 'integration-fares',
-                        'label' => 'Tariffe',
-                        'href' => cvAccessoUrl('integrazione_tariffe.php'),
-                    ],
-                ],
+            $integrationChildren[] = [
+                'slug' => 'integration-stops',
+                'label' => 'Fermate',
+                'href' => cvAccessoUrl('integrazione_fermate.php'),
+            ];
+            $integrationChildren[] = [
+                'slug' => 'integration-lines',
+                'label' => 'Linee',
+                'href' => cvAccessoUrl('integrazione_linee.php'),
+            ];
+            $integrationChildren[] = [
+                'slug' => 'integration-trips',
+                'label' => 'Corse',
+                'href' => cvAccessoUrl('integrazione_corse.php'),
+            ];
+            $integrationChildren[] = [
+                'slug' => 'integration-fares',
+                'label' => 'Tariffe',
+                'href' => cvAccessoUrl('integrazione_tariffe.php'),
             ];
         }
+        $integrationChildren[] = [
+            'slug' => 'sync',
+            'label' => 'Sync',
+            'href' => cvAccessoUrl('sync.php'),
+        ];
+
+        $items[] = [
+            'slug' => 'integration-root',
+            'label' => 'Integrazione',
+            'href' => '#',
+            'icon' => 'fa-plug',
+            'children' => $integrationChildren,
+        ];
+
+        $maintenanceChildren = [
+            [
+                'slug' => 'cache',
+                'label' => 'Cache',
+                'href' => cvAccessoUrl('cache.php'),
+            ],
+        ];
 
         if (cvAccessoIsAdmin($state)) {
+            $maintenanceChildren[] = [
+                'slug' => 'maintenance',
+                'label' => 'Manutenzione',
+                'href' => cvAccessoUrl('manutenzione.php'),
+            ];
+            $maintenanceChildren[] = [
+                'slug' => 'maintenance-travelers-temp',
+                'label' => 'Pulizia viaggiatori temp',
+                'href' => cvAccessoUrl('viaggiatori-temp.php'),
+            ];
+
             $items[] = [
                 'slug' => 'assistant-root',
                 'label' => 'Assistente',
@@ -1189,23 +1231,20 @@ if (!function_exists('cvAccessoNavItems')) {
                 'href' => cvAccessoUrl('users.php'),
                 'icon' => 'fa-users',
             ];
+            
             $items[] = [
                 'slug' => 'settings-places',
                 'label' => 'Macroaree',
                 'href' => cvAccessoUrl('places.php'),
                 'icon' => 'fa-map-marker',
             ];
+            
+            
             $items[] = [
                 'slug' => 'settings-promotions',
                 'label' => 'Promozioni',
                 'href' => cvAccessoUrl('promozioni.php'),
                 'icon' => 'fa-tags',
-            ];
-            $items[] = [
-                'slug' => 'maintenance',
-                'label' => 'Manutenzione',
-                'href' => cvAccessoUrl('manutenzione.php'),
-                'icon' => 'fa-wrench',
             ];
             $items[] = [
                 'slug' => 'settings-route-pages',
@@ -1253,6 +1292,14 @@ if (!function_exists('cvAccessoNavItems')) {
                 ],
             ];
         }
+
+        $integrationChildren[] = [
+            'slug' => 'maintenance-root',
+            'label' => 'Manutenzione',
+            'href' => '#',
+            'icon' => 'fa-wrench',
+            'children' => $maintenanceChildren,
+        ];
 
         return $items;
     }

@@ -56,6 +56,7 @@
     queryAdults: 1,
     queryChildren: 0,
     order: null,
+    paymentMode: 'marketplace_split',
     isSubmitting: false,
     stripe: null,
     canUsePaypal: false,
@@ -644,7 +645,9 @@
       html += '<div class="cv-checkout-total-row"><span>' + promoText + '</span><strong>- € ' + euro(promoDiscountTotal) + '</strong></div>';
     }
     html += '<div class="cv-checkout-total-row"><span>Totale cliente</span><strong>€ ' + euro(total) + '</strong></div>';
-    html += '<div class="cv-checkout-total-row"><span>Commissione (inclusa)</span><strong>€ ' + euro(totalCommission) + '</strong></div>';
+    if (state.paymentMode !== 'marketplace_single') {
+      html += '<div class="cv-checkout-total-row"><span>Commissione (inclusa)</span><strong>€ ' + euro(totalCommission) + '</strong></div>';
+    }
 
     totalsEl.innerHTML = html;
     updatePaymentUiState();
@@ -1699,7 +1702,7 @@
         baggage: baggageResult.items,
         promotion_code: String(state.promotionCode || '').trim(),
         codice_camb: String(state.booking.query && state.booking.query.camb ? state.booking.query.camb : '').trim(),
-        payment_mode: 'marketplace_split',
+        payment_mode: state.paymentMode,
         reserve: true
       }
     };
@@ -2238,3 +2241,12 @@
   finalizeStripeFromUrlIfNeeded();
 
 })();
+  function normalizePaymentMode(value) {
+    var mode = String(value || '').trim().toLowerCase();
+    if (mode === 'marketplace_single' || mode === 'marketplace_split' || mode === 'provider_direct') {
+      return mode;
+    }
+    return 'marketplace_split';
+  }
+
+  state.paymentMode = normalizePaymentMode(paymentConfig.marketplace_payment_mode || paymentConfig.payment_mode || 'marketplace_split');

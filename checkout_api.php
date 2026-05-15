@@ -1715,6 +1715,44 @@ function cvCheckoutApiBuildPaypalPurchaseUnits(
     return $units;
 }
 
+/**
+ * @return array<int,array<string,mixed>>
+ */
+function cvCheckoutApiBuildPaypalSinglePurchaseUnits(
+    float $totalAmount,
+    string $currency,
+    string $orderCode,
+    string $platformMerchantId,
+    string $platformEmail
+): array {
+    $totalAmount = round(max(0.0, $totalAmount), 2);
+    if ($totalAmount <= 0.0) {
+        return [];
+    }
+
+    $payee = [];
+    $platformMerchantId = strtoupper(trim($platformMerchantId));
+    $platformEmail = trim($platformEmail);
+    if ($platformMerchantId !== '') {
+        $payee['merchant_id'] = $platformMerchantId;
+    } elseif ($platformEmail !== '') {
+        $payee['email_address'] = $platformEmail;
+    }
+
+    $unit = [
+        'reference_id' => 'marketplace_' . $orderCode,
+        'amount' => [
+            'currency_code' => $currency,
+            'value' => number_format($totalAmount, 2, '.', ''),
+        ],
+    ];
+    if (count($payee) > 0) {
+        $unit['payee'] = $payee;
+    }
+
+    return [$unit];
+}
+
 function cvCheckoutApiUpdateOrderStatus(mysqli $connection, string $orderCode, string $status): void
 {
     $sql = "UPDATE cv_orders SET status = ? WHERE order_code = ? LIMIT 1";
@@ -1979,9 +2017,17 @@ function cvCheckoutApiReplacePaymentSplits(
         }
     }
 
+    $orderPaymentMode = strtolower(trim((string) ($order['payment_mode'] ?? 'marketplace_split')));
+    if (!in_array($orderPaymentMode, ['provider_direct', 'marketplace_split', 'marketplace_single'], true)) {
+        $orderPaymentMode = 'marketplace_split';
+    }
+    $providerSplitStatus = ($orderPaymentMode === 'marketplace_single') ? 'pending' : 'settled';
+    $providerSettledAt = ($providerSplitStatus === 'settled') ? date('Y-m-d H:i:s') : null;
+    $platformSettledAt = date('Y-m-d H:i:s');
+
     $insertSql = "INSERT INTO cv_payment_splits
         (payment_tx_id, id_az, split_type, amount, status, settled_at, meta_json)
-        VALUES (?, ?, ?, ?, 'settled', NOW(), ?)";
+        VALUES (?, ?, ?, ?, ?, ?, ?)";
     $insertStmt = $connection->prepare($insertSql);
     if (!$insertStmt instanceof mysqli_stmt) {
         throw new RuntimeException('Prepare cv_payment_splits failed.');
@@ -2003,7 +2049,9 @@ function cvCheckoutApiReplacePaymentSplits(
         ]);
         $idAz = (int) ($providerIdMap[$providerCode] ?? 0);
         $splitType = 'provider_amount';
-        $insertStmt->bind_param('iisds', $paymentTxId, $idAz, $splitType, $net, $metaJson);
+        $status = $providerSplitStatus;
+        $settledAt = $providerSettledAt;
+        $insertStmt->bind_param('iisdsss', $paymentTxId, $idAz, $splitType, $net, $status, $settledAt, $metaJson);
         if (!$insertStmt->execute()) {
             $error = $insertStmt->error;
             $insertStmt->close();
@@ -2018,7 +2066,9 @@ function cvCheckoutApiReplacePaymentSplits(
         ]);
         $splitType = 'platform_fee';
         $idAzNull = null;
-        $insertStmt->bind_param('iisds', $paymentTxId, $idAzNull, $splitType, $commissionTotal, $metaJson);
+        $status = 'settled';
+        $settledAt = $platformSettledAt;
+        $insertStmt->bind_param('iisdsss', $paymentTxId, $idAzNull, $splitType, $commissionTotal, $status, $settledAt, $metaJson);
         if (!$insertStmt->execute()) {
             $error = $insertStmt->error;
             $insertStmt->close();
@@ -3950,30 +4000,38 @@ if ($action !== 'create_order') {
         $providerEmails = cvCheckoutApiNormalizeStringKeyMap(
             is_array($paymentConfig['provider_paypal_emails'] ?? null) ? $paymentConfig['provider_paypal_emails'] : []
         );
-        $providerPaypalCheckoutEnabled = cvCheckoutApiNormalizeStringKeyMap(
-            is_array($paymentConfig['provider_paypal_checkout_enabled'] ?? null) ? $paymentConfig['provider_paypal_checkout_enabled'] : []
-        );
-        $platformMerchantId = trim((string) ($paypal['merchant_id'] ?? ''));
+	        $providerPaypalCheckoutEnabled = cvCheckoutApiNormalizeStringKeyMap(
+	            is_array($paymentConfig['provider_paypal_checkout_enabled'] ?? null) ? $paymentConfig['provider_paypal_checkout_enabled'] : []
+	        );
+	        $platformMerchantId = trim((string) ($paypal['merchant_id'] ?? ''));
+	        $platformEmail = trim((string) ($paypal['email'] ?? ''));
+	        $orderPaymentMode = strtolower(trim((string) ($order['payment_mode'] ?? 'marketplace_split')));
+	        if (!in_array($orderPaymentMode, ['provider_direct', 'marketplace_split', 'marketplace_single'], true)) {
+	            $orderPaymentMode = 'marketplace_split';
+	        }
 
-        $providerCodes = cvCheckoutApiProviderCodesFromSplitMap($providerSplitMap);
-        foreach ($providerCodes as $providerCode) {
-            $isEnabled = ((int) ($providerPaypalCheckoutEnabled[$providerCode] ?? 0)) === 1;
-            if (!$isEnabled) {
-                cvCheckoutApiRespond(422, [
-                    'success' => false,
-                    'message' => 'PayPal non attivo sul provider ' . $providerCode . '.',
-                ]);
-            }
+	        $providerCodes = [];
+	        if ($orderPaymentMode !== 'marketplace_single') {
+	            $providerCodes = cvCheckoutApiProviderCodesFromSplitMap($providerSplitMap);
+	            foreach ($providerCodes as $providerCode) {
+	                $isEnabled = ((int) ($providerPaypalCheckoutEnabled[$providerCode] ?? 0)) === 1;
+	                if (!$isEnabled) {
+	                    cvCheckoutApiRespond(422, [
+	                        'success' => false,
+	                        'message' => 'PayPal non attivo sul provider ' . $providerCode . '.',
+	                    ]);
+	                }
 
-            $merchantId = trim((string) ($providerMerchantIds[$providerCode] ?? ''));
-            $email = trim((string) ($providerEmails[$providerCode] ?? ''));
-            if ($merchantId === '' && $email === '') {
-                cvCheckoutApiRespond(422, [
-                    'success' => false,
-                    'message' => 'PayPal non configurato sul provider ' . $providerCode . '.',
-                ]);
-            }
-        }
+	                $merchantId = trim((string) ($providerMerchantIds[$providerCode] ?? ''));
+	                $email = trim((string) ($providerEmails[$providerCode] ?? ''));
+	                if ($merchantId === '' && $email === '') {
+	                    cvCheckoutApiRespond(422, [
+	                        'success' => false,
+	                        'message' => 'PayPal non configurato sul provider ' . $providerCode . '.',
+	                    ]);
+	                }
+	            }
+	        }
 
         $token = cvCheckoutApiPaypalAccessToken($paypal);
         if ($token === '') {
@@ -3988,26 +4046,41 @@ if ($action !== 'create_order') {
             ]);
         }
 
-        $commissionTotal = cvCheckoutApiPlatformCommissionTotal($providerSplitMap);
-        $attemptSpecs = [
-            [
-                'mode' => 'net_split_context',
-                'use_platform_fees' => false,
-                'with_context' => true,
-            ],
-            [
-                'mode' => 'net_split_minimal',
-                'use_platform_fees' => false,
-                'with_context' => false,
-            ],
-        ];
-        if ($commissionTotal > 0.0 && trim($platformMerchantId) !== '') {
-            $attemptSpecs[] = [
-                'mode' => 'platform_fees_minimal',
-                'use_platform_fees' => true,
-                'with_context' => false,
-            ];
-        }
+	        $commissionTotal = cvCheckoutApiPlatformCommissionTotal($providerSplitMap);
+	        if ($orderPaymentMode === 'marketplace_single') {
+	            $attemptSpecs = [
+	                [
+	                    'mode' => 'single_context',
+	                    'use_platform_fees' => false,
+	                    'with_context' => true,
+	                ],
+	                [
+	                    'mode' => 'single_minimal',
+	                    'use_platform_fees' => false,
+	                    'with_context' => false,
+	                ],
+	            ];
+	        } else {
+	            $attemptSpecs = [
+	                [
+	                    'mode' => 'net_split_context',
+	                    'use_platform_fees' => false,
+	                    'with_context' => true,
+	                ],
+	                [
+	                    'mode' => 'net_split_minimal',
+	                    'use_platform_fees' => false,
+	                    'with_context' => false,
+	                ],
+	            ];
+	            if ($commissionTotal > 0.0 && trim($platformMerchantId) !== '') {
+	                $attemptSpecs[] = [
+	                    'mode' => 'platform_fees_minimal',
+	                    'use_platform_fees' => true,
+	                    'with_context' => false,
+	                ];
+	            }
+	        }
 
         $paypalCreate = null;
         $usedAttemptMode = '';
@@ -4022,15 +4095,25 @@ if ($action !== 'create_order') {
             $attemptUsePlatformFees = !empty($attemptSpec['use_platform_fees']);
             $attemptWithContext = !empty($attemptSpec['with_context']);
 
-            $attemptUnits = cvCheckoutApiBuildPaypalPurchaseUnits(
-                $providerSplitMap,
-                $providerMerchantIds,
-                $providerEmails,
-                $currency,
-                $orderCode,
-                $platformMerchantId,
-                $attemptUsePlatformFees
-            );
+	            if ($orderPaymentMode === 'marketplace_single') {
+	                $attemptUnits = cvCheckoutApiBuildPaypalSinglePurchaseUnits(
+	                    (float) ($order['total_amount'] ?? 0.0),
+	                    $currency,
+	                    $orderCode,
+	                    $platformMerchantId,
+	                    $platformEmail
+	                );
+	            } else {
+	                $attemptUnits = cvCheckoutApiBuildPaypalPurchaseUnits(
+	                    $providerSplitMap,
+	                    $providerMerchantIds,
+	                    $providerEmails,
+	                    $currency,
+	                    $orderCode,
+	                    $platformMerchantId,
+	                    $attemptUsePlatformFees
+	                );
+	            }
             if (count($attemptUnits) === 0) {
                 continue;
             }
@@ -4499,40 +4582,47 @@ if ($action !== 'create_order') {
             ]);
         }
 
-        $providerStripeAccountIds = is_array($paymentConfig['provider_stripe_account_ids'] ?? null)
-            ? $paymentConfig['provider_stripe_account_ids']
-            : [];
-        $transferGroup = 'CV-' . $orderCode;
-        $transferResults = [];
-        foreach ($providerSplitMap as $providerCode => $splitData) {
-            $destination = trim((string) ($providerStripeAccountIds[$providerCode] ?? ''));
-            $netAmountCents = (int) round(max(0.0, (float) ($splitData['net'] ?? 0.0)) * 100);
-            if ($destination === '' || $netAmountCents <= 0) {
-                continue;
-            }
+	        $orderPaymentMode = strtolower(trim((string) ($order['payment_mode'] ?? 'marketplace_split')));
+	        if (!in_array($orderPaymentMode, ['provider_direct', 'marketplace_split', 'marketplace_single'], true)) {
+	            $orderPaymentMode = 'marketplace_split';
+	        }
 
-            $transferPayload = [
-                'amount' => $netAmountCents,
-                'currency' => strtolower($currency),
-                'destination' => $destination,
-                'transfer_group' => $transferGroup,
-                'description' => 'Cercaviaggio split ' . strtoupper($providerCode) . ' ' . $orderCode,
-            ];
-            $transfer = cvCheckoutApiCurlJson(
-                'POST',
-                'https://api.stripe.com/v1/transfers',
-                [
-                    'Authorization: Bearer ' . $secretKey,
-                ],
-                $transferPayload,
-                true
-            );
-            $transferResults[$providerCode] = [
-                'ok' => (bool) ($transfer['ok'] ?? false),
-                'status' => (int) ($transfer['status'] ?? 0),
-                'raw' => $transfer['raw'] ?? null,
-            ];
-        }
+	        $transferResults = [];
+	        if ($orderPaymentMode === 'marketplace_split') {
+	            $providerStripeAccountIds = is_array($paymentConfig['provider_stripe_account_ids'] ?? null)
+	                ? $paymentConfig['provider_stripe_account_ids']
+	                : [];
+	            $transferGroup = 'CV-' . $orderCode;
+	            foreach ($providerSplitMap as $providerCode => $splitData) {
+	                $destination = trim((string) ($providerStripeAccountIds[$providerCode] ?? ''));
+	                $netAmountCents = (int) round(max(0.0, (float) ($splitData['net'] ?? 0.0)) * 100);
+	                if ($destination === '' || $netAmountCents <= 0) {
+	                    continue;
+	                }
+
+	                $transferPayload = [
+	                    'amount' => $netAmountCents,
+	                    'currency' => strtolower($currency),
+	                    'destination' => $destination,
+	                    'transfer_group' => $transferGroup,
+	                    'description' => 'Cercaviaggio split ' . strtoupper($providerCode) . ' ' . $orderCode,
+	                ];
+	                $transfer = cvCheckoutApiCurlJson(
+	                    'POST',
+	                    'https://api.stripe.com/v1/transfers',
+	                    [
+	                        'Authorization: Bearer ' . $secretKey,
+	                    ],
+	                    $transferPayload,
+	                    true
+	                );
+	                $transferResults[$providerCode] = [
+	                    'ok' => (bool) ($transfer['ok'] ?? false),
+	                    'status' => (int) ($transfer['status'] ?? 0),
+	                    'raw' => $transfer['raw'] ?? null,
+	                ];
+	            }
+	        }
 
         cvCheckoutApiRespond(200, [
             'success' => true,
@@ -4768,24 +4858,33 @@ if ($idempotencyKey === '') {
 }
 $idempotencyKey = substr($idempotencyKey, 0, 120);
 
-try {
-    $connection = cvDbConnection();
-    $providers = cvProviderConfigs($connection);
-    $providers = cvCheckoutApiNormalizeStringKeyMap($providers);
-    $providerCommissionMap = cvRuntimeProviderCommissionMap($connection);
-    $aziendaMap = cvCheckoutApiFetchAziendaIdsByCode($connection);
-    $aziendaMap = cvCheckoutApiNormalizeStringKeyMap($aziendaMap);
-} catch (Throwable $exception) {
-    cvCheckoutApiRespond(500, [
-        'success' => false,
-        'message' => 'Errore database durante inizializzazione checkout.',
-    ]);
-}
+	try {
+	    $connection = cvDbConnection();
+	    $providers = cvProviderConfigs($connection);
+	    $providers = cvCheckoutApiNormalizeStringKeyMap($providers);
+	    $providerCommissionMap = cvRuntimeProviderCommissionMap($connection);
+	    $marketplacePaymentConfig = cvRuntimeMarketplacePaymentConfig($connection);
+	    $aziendaMap = cvCheckoutApiFetchAziendaIdsByCode($connection);
+	    $aziendaMap = cvCheckoutApiNormalizeStringKeyMap($aziendaMap);
+	} catch (Throwable $exception) {
+	    cvCheckoutApiRespond(500, [
+	        'success' => false,
+	        'message' => 'Errore database durante inizializzazione checkout.',
+	    ]);
+	}
 
-if ($codiceCamb !== '') {
-    $changePassengerLock = cvCheckoutApiLoadChangePassengerLock($connection, $codiceCamb);
-    if (!is_array($changePassengerLock)) {
-        cvCheckoutApiRespond(422, [
+	$enforcedMarketplaceMode = strtolower(trim((string) ($marketplacePaymentConfig['marketplace_payment_mode'] ?? 'marketplace_split')));
+	if (!in_array($enforcedMarketplaceMode, ['marketplace_split', 'marketplace_single'], true)) {
+	    $enforcedMarketplaceMode = 'marketplace_split';
+	}
+	if ($paymentMode !== 'provider_direct') {
+	    $paymentMode = $enforcedMarketplaceMode;
+	}
+
+	if ($codiceCamb !== '') {
+	    $changePassengerLock = cvCheckoutApiLoadChangePassengerLock($connection, $codiceCamb);
+	    if (!is_array($changePassengerLock)) {
+	        cvCheckoutApiRespond(422, [
             'success' => false,
             'message' => 'Impossibile recuperare il passeggero del biglietto originario per il cambio.',
         ]);

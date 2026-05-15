@@ -232,6 +232,21 @@ if (!function_exists('cvRuntimeSettingSpecs')) {
                 'type' => 'string',
                 'default' => 'live',
             ],
+            'checkout_marketplace_payment_mode' => [
+                'label' => 'Modalita pagamento checkout',
+                'help' => 'marketplace_split = pagamento splittato (provider + commissione). marketplace_single = pagamento totale a Cercaviaggio.',
+                'type' => 'string',
+                'default' => 'marketplace_split',
+            ],
+            'checkout_hide_provider_payment_settings' => [
+                'label' => 'Nascondi impostazioni pagamenti provider',
+                'help' => '0 mostra le sezioni di configurazione pagamenti per provider, 1 le nasconde (anche per i provider).',
+                'type' => 'int',
+                'default' => 0,
+                'min' => 0,
+                'max' => 1,
+                'step' => 1,
+            ],
             'checkout_marketplace_paypal_email' => [
                 'label' => 'Email PayPal marketplace',
                 'help' => 'Email account PayPal piattaforma.',
@@ -742,6 +757,11 @@ if (!function_exists('cvRuntimeMarketplacePaymentConfig')) {
             $paypalEnv = 'live';
         }
 
+        $marketplacePaymentMode = strtolower(trim((string) ($settings['checkout_marketplace_payment_mode'] ?? 'marketplace_split')));
+        if (!in_array($marketplacePaymentMode, ['marketplace_split', 'marketplace_single'], true)) {
+            $marketplacePaymentMode = 'marketplace_split';
+        }
+
         return [
             'paypal' => [
                 'env' => $paypalEnv,
@@ -778,6 +798,7 @@ if (!function_exists('cvRuntimeMarketplacePaymentConfig')) {
             'provider_stripe_publishable_keys' => cvRuntimeSettingJsonStringMap($settings['checkout_provider_stripe_publishable_keys'] ?? ''),
             'provider_stripe_secret_keys' => cvRuntimeSettingJsonStringMap($settings['checkout_provider_stripe_secret_keys'] ?? ''),
             'provider_stripe_webhook_secrets' => cvRuntimeSettingJsonStringMap($settings['checkout_provider_stripe_webhook_secrets'] ?? ''),
+            'marketplace_payment_mode' => $marketplacePaymentMode,
         ];
     }
 }
