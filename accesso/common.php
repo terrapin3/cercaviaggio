@@ -12,6 +12,10 @@ if (!function_exists('cvAccessoLoadConfig')) {
     function cvAccessoLoadConfig(): array
     {
         static $config = null;
+        if (!empty($GLOBALS['cv_accesso_config_reset'])) {
+            $config = null;
+            $GLOBALS['cv_accesso_config_reset'] = false;
+        }
         if (is_array($config)) {
             return $config;
         }
@@ -59,6 +63,13 @@ if (!function_exists('cvAccessoLoadConfig')) {
 
         $config = $base;
         return $config;
+    }
+}
+
+if (!function_exists('cvAccessoResetConfigCache')) {
+    function cvAccessoResetConfigCache(): void
+    {
+        $GLOBALS['cv_accesso_config_reset'] = true;
     }
 }
 
@@ -452,6 +463,8 @@ if (!function_exists('cvAccessoSaveBackendUser')) {
         $logoPath = trim((string) ($payload['logo_path'] ?? ''));
         $role = strtolower(trim((string) ($payload['role'] ?? 'provider')));
         $password = (string) ($payload['password'] ?? '');
+        $password = (string) preg_replace('/\R/u', '', $password);
+        $password = trim($password);
         $isActive = !empty($payload['is_active']) ? 1 : 0;
         $providers = isset($payload['providers']) && is_array($payload['providers']) ? cvCacheNormalizeProviderCodes($payload['providers']) : [];
         $hasEncryptedPasswordColumn = cvAccessoBackendEncryptedPasswordColumnExists($connection);
@@ -797,12 +810,14 @@ if (!function_exists('cvAccessoLoginAccount')) {
      * @param array<string,mixed> $config
      * @return array<string,mixed>|null
      */
-    function cvAccessoLoginAccount(array $config, string $email, string $password): ?array
-    {
-        $email = strtolower(trim($email));
-        if ($email === '' || $password === '') {
-            return null;
-        }
+function cvAccessoLoginAccount(array $config, string $email, string $password): ?array
+{
+    $email = strtolower(trim($email));
+    $password = (string) preg_replace('/\R/u', '', $password);
+    $password = trim($password);
+    if ($email === '' || $password === '') {
+        return null;
+    }
 
         $accounts = isset($config['accounts']) && is_array($config['accounts']) ? $config['accounts'] : [];
         if (!isset($accounts[$email]) || !is_array($accounts[$email])) {
@@ -1109,9 +1124,9 @@ if (!function_exists('cvAccessoNavItems')) {
                     ],
                 ],
             ],
-	            ['slug' => 'providers', 'label' => 'Provider', 'href' => cvAccessoUrl('providers.php'), 'icon' => 'fa-building'],
-	            ['slug' => 'homepage-featured', 'label' => 'Vetrina home', 'href' => cvAccessoUrl('homepage.php'), 'icon' => 'fa-star'],
-	            cvAccessoIsAdmin($state)
+            ['slug' => 'providers', 'label' => 'Provider', 'href' => cvAccessoUrl('providers.php'), 'icon' => 'fa-building'],
+            ['slug' => 'homepage-featured', 'label' => 'Vetrina home', 'href' => cvAccessoUrl('homepage.php'), 'icon' => 'fa-star'],
+            cvAccessoIsAdmin($state)
 	                ? [
 	                    'slug' => 'statistics-root',
 	                    'label' => 'Statistiche',
@@ -1132,6 +1147,15 @@ if (!function_exists('cvAccessoNavItems')) {
 	                ]
 	                : ['slug' => 'statistics', 'label' => 'Statistiche', 'href' => cvAccessoUrl('statistiche.php'), 'icon' => 'fa-bar-chart'],
 	        ];
+
+	        if (!cvAccessoIsAdmin($state)) {
+	            $items[] = [
+	                'slug' => 'settings-payments',
+	                'label' => 'Pagamenti',
+	                'href' => cvAccessoUrl('pagamenti.php'),
+	                'icon' => 'fa-credit-card',
+	            ];
+	        }
 
         $integrationChildren = [];
         if (cvAccessoHasManualIntegration($state)) {

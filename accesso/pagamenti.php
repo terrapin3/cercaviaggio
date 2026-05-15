@@ -82,10 +82,11 @@ try {
                 $providerMaps['checkout_provider_stripe_publishable_keys'][$providerCode] = trim((string) ($_POST['provider_stripe_publishable_keys'][$providerCode] ?? ''));
                 $providerMaps['checkout_provider_stripe_secret_keys'][$providerCode] = trim((string) ($_POST['provider_stripe_secret_keys'][$providerCode] ?? ''));
                 $providerMaps['checkout_provider_stripe_webhook_secrets'][$providerCode] = trim((string) ($_POST['provider_stripe_webhook_secrets'][$providerCode] ?? ''));
-            }
+            } 
 
             $nextSettings = $settings;
-            $allowProviderPaymentSettingsUpdate = cvAccessoIsAdmin($state);
+            $hideProviderPaymentSettingsExisting = ((int) ($settings['checkout_hide_provider_payment_settings'] ?? 0)) === 1;
+            $allowProviderPaymentSettingsUpdate = !$hideProviderPaymentSettingsExisting;
 
             if (cvAccessoIsAdmin($state)) {
                 $marketplacePaymentModeRaw = strtolower(trim((string) ($_POST['checkout_marketplace_payment_mode'] ?? 'marketplace_split')));
@@ -94,9 +95,7 @@ try {
 
                 $hideProviderPaymentSettings = ((int) ($_POST['checkout_hide_provider_payment_settings'] ?? 0)) > 0 ? 1 : 0;
                 $nextSettings['checkout_hide_provider_payment_settings'] = $hideProviderPaymentSettings;
-                if ($hideProviderPaymentSettings === 1) {
-                    $allowProviderPaymentSettingsUpdate = false;
-                }
+                $allowProviderPaymentSettingsUpdate = $hideProviderPaymentSettings !== 1;
 
                 $marketplacePaypalEnv = strtolower(trim((string) ($_POST['checkout_marketplace_paypal_env'] ?? 'live')));
                 if (!in_array($marketplacePaypalEnv, ['sandbox', 'live'], true)) {
@@ -122,6 +121,12 @@ try {
 
             if ($allowProviderPaymentSettingsUpdate) {
                 foreach ($providerMaps as $key => $value) {
+                    if (!isset($_POST['provider_paypal_environments']) && strpos($key, 'checkout_provider_paypal_') === 0) {
+                        continue;
+                    }
+                    if (!isset($_POST['provider_stripe_account_ids']) && strpos($key, 'checkout_provider_stripe_') === 0) {
+                        continue;
+                    }
                     $nextSettings[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 }
             }
@@ -171,7 +176,7 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
 	                    $currentPaymentMode = 'marketplace_split';
 	                }
 	                $hideProviderPaymentSettings = ((int) ($settings['checkout_hide_provider_payment_settings'] ?? 0)) === 1;
-	                $showProviderPaymentSettings = cvAccessoIsAdmin($state) && !$hideProviderPaymentSettings;
+	                $showProviderPaymentSettings = !$hideProviderPaymentSettings;
 	                ?>
 
 	                <?php if (cvAccessoIsAdmin($state)): ?>
@@ -222,6 +227,12 @@ cvAccessoRenderPageStart('Pagamenti', 'settings-payments', $state);
 	                    </div>
 
 	                    <hr>
+	                <?php endif; ?>
+
+	                <?php if (!$showProviderPaymentSettings && !cvAccessoIsAdmin($state)): ?>
+	                    <div class="alert alert-info cv-alert" role="alert" style="margin-top:10px;">
+	                        La configurazione pagamenti del tuo provider non e disponibile.
+	                    </div>
 	                <?php endif; ?>
 
 	                <ul class="nav nav-tabs" role="tablist" style="margin-bottom:14px;">

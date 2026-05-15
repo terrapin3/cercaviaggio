@@ -200,16 +200,16 @@ try {
         foreach ($users as $user) {
             if ((int) ($user['id_user'] ?? 0) === $editUserId) {
                 $editUser = $user;
-                $formData = [
-                    'id_user' => (int) ($user['id_user'] ?? 0),
-                    'email' => (string) ($user['email'] ?? ''),
-                    'name' => (string) ($user['name'] ?? ''),
-                    'logo_path' => (string) ($user['logo_path'] ?? ''),
-                    'password' => (string) ($user['password_plain'] ?? ''),
-                    'role' => (string) ($user['role'] ?? 'provider'),
-                    'is_active' => (int) ($user['is_active'] ?? 0),
-                    'providers' => isset($user['providers']) && is_array($user['providers']) ? $user['providers'] : [],
-                ];
+	                $formData = [
+	                    'id_user' => (int) ($user['id_user'] ?? 0),
+	                    'email' => (string) ($user['email'] ?? ''),
+	                    'name' => (string) ($user['name'] ?? ''),
+	                    'logo_path' => (string) ($user['logo_path'] ?? ''),
+	                    'password' => '',
+	                    'role' => (string) ($user['role'] ?? 'provider'),
+	                    'is_active' => (int) ($user['is_active'] ?? 0),
+	                    'providers' => isset($user['providers']) && is_array($user['providers']) ? $user['providers'] : [],
+	                ];
                 break;
             }
         }
